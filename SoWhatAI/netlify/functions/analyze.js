@@ -31,6 +31,7 @@ exports.handler = async (event) => {
       - "themes": An array of the top 3-5 recurring themes. Each theme should be an object with "theme" (a short title), "evidence" (an array of direct quotes supporting the theme), and "prominence" (a score from 1-10).
       - "verbatimQuotes": An array of 3 impactful, verbatim quotes from the text.
       - "sentimentDistribution": An object with "positive", "negative", and "neutral" keys, with percentage values (e.g., { "positive": 65, "negative": 20, "neutral": 15 }).
+      - "soWhatActions": An array of 3 concrete, actionable recommendations based on the analysis. These could be strategic changes, specific actions, or suggestions for future research.
 
       **Important:**
       - The analysis must be objective and based strictly on the provided data.
@@ -76,7 +77,6 @@ exports.handler = async (event) => {
 
     // --- 3. Add Quantitative Data and Return ---
     // The AI handles the qualitative part. We'll still process the quantitative part here.
-    // In the future, we could also ask the AI to summarize the quantitative findings.
     let quantitativeResults = null;
     if (quantitativeData && quantitativeData.length > 0) {
         const resultsByFile = {};
