@@ -1,98 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 
-// --- Helper & Mock Data ---
-
-// This function simulates a call to the Gemini API.
-// It's now upgraded to generate a "soWhatActions" list.
-const mockApiCall = ({ textData, quantitativeData, researchQuestion }) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // --- Qualitative Analysis (from text) ---
-      const lowerCaseText = textData.toLowerCase();
-      let sentiment = 'Neutral';
-      let themes = [];
-      let narrativeOverview = `In response to the research question, "${researchQuestion}", the data presents a nuanced picture. While the overall sentiment leans positive, driven by strong appreciation for new collaboration features, a significant point of friction exists regarding performance. This suggests a classic tension between innovation and stability that needs to be addressed.`;
-      let sentimentDistribution = { positive: 45, negative: 25, neutral: 30 };
-      let soWhatActions = [
-          "Investigate performance bottlenecks affecting power-users.",
-          "Consider A/B testing UI changes with a segment of long-time users before full rollout.",
-          "Launch a marketing campaign highlighting the popular new collaboration features."
-      ];
-
-      if (lowerCaseText.includes('happy') || lowerCaseText.includes('excellent') || lowerCaseText.includes('love')) {
-        sentiment = 'Positive';
-        narrativeOverview = `Regarding the question, "${researchQuestion}", the feedback is predominantly positive, indicating a successful launch. Users are particularly enthusiastic about the new collaboration tools. However, this is not universal. A key counterpoint emerges from power-users who are experiencing performance issues. The core challenge is to maintain this positive momentum while addressing performance to avoid alienating long-time users.`;
-        sentimentDistribution = { positive: 65, negative: 20, neutral: 15 };
-      }
-      
-      if (lowerCaseText.includes('customer') || lowerCaseText.includes('user')) {
-        themes.push({ theme: 'Customer Experience', emoji: '👥', evidence: ["Users love the new collaboration features...", "...report that the product is much more intuitive.", "Overall, I love the new collaboration features..."], prominence: 9 });
-      }
-      if (lowerCaseText.includes('software') || lowerCaseText.includes('product')) {
-        themes.push({ theme: 'Product Performance', emoji: '💻', evidence: ["...a few power-users have mentioned that the new interface feels slower...", "...for their specific workflows.", "the new interface feels a bit slower..."], prominence: 8 });
-      }
-       if (lowerCaseText.includes('team') || lowerCaseText.includes('collaboration')) {
-        themes.push({ theme: 'Team Alignment', emoji: '🤝', evidence: ["...the development team is concerned about the performance complaints.", "We need to find a balance.", "they make working with my team so much more intuitive."], prominence: 6 });
-      }
-      
-      const sentences = textData.match(/[^.!?]+[.!?]+/g) || [];
-      const keywords = ['love', 'slower', 'balance', 'intuitive'];
-      const verbatimQuotes = [];
-      const usedSentences = new Set();
-      keywords.forEach(keyword => {
-          const foundSentence = sentences.find(s => s.toLowerCase().includes(keyword) && !usedSentences.has(s));
-          if (foundSentence) { verbatimQuotes.push(foundSentence.trim()); usedSentences.add(foundSentence); }
-      });
-      if (verbatimQuotes.length === 0 && sentences.length > 0) { verbatimQuotes.push(sentences[0].trim()); }
-
-      // --- Quantitative Analysis (from spreadsheet) ---
-      let quantitativeResults = null;
-      if (quantitativeData && quantitativeData.length > 0) {
-          const resultsByFile = {};
-          quantitativeData.forEach(({ title, values, mapping, sourceFile }) => {
-              if (!resultsByFile[sourceFile]) {
-                  resultsByFile[sourceFile] = { stats: [], categories: [] };
-              }
-
-              if (mapping === 'stats' && values.length > 0) {
-                  const numbers = values.map(Number).filter(n => !isNaN(n));
-                  if (numbers.length > 0) {
-                    const sum = numbers.reduce((a, b) => a + b, 0);
-                    const mean = (sum / numbers.length).toFixed(2);
-                    const sorted = [...numbers].sort((a, b) => a - b);
-                    const median = sorted.length % 2 === 0 ? ((sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2).toFixed(2) : sorted[Math.floor(sorted.length / 2)];
-                    resultsByFile[sourceFile].stats.push({ title, mean, median, mode: 'N/A' });
-                  } else {
-                    resultsByFile[sourceFile].stats.push({ title, mean: null, median: null, mode: null, error: "Not numeric data" });
-                  }
-              } else if (mapping === 'category' && values.length > 0) {
-                  const counts = values.reduce((acc, val) => { acc[val] = (acc[val] || 0) + 1; return acc; }, {});
-                  const categoryData = Object.entries(counts).map(([name, count]) => ({ name, count }));
-                  resultsByFile[sourceFile].categories.push({ title, data: categoryData });
-              }
-          });
-          quantitativeResults = Object.entries(resultsByFile).map(([sourceFile, data]) => ({ sourceFile, ...data }));
-          
-          if(quantitativeResults.length > 0 && sentiment === 'Positive') {
-              narrativeOverview += " This positive sentiment appears to be consistent across different user demographics noted in the survey data."
-          }
-      }
-
-      resolve({
-        narrativeOverview,
-        themes: themes.sort((a,b) => b.prominence - a.prominence),
-        sentiment,
-        sentimentDistribution,
-        verbatimQuotes,
-        quantitativeResults,
-        researchQuestion,
-        soWhatActions
-      });
-    }, 1500);
-  });
-};
-
-
 // --- UI Components ---
 
 const Header = () => (
@@ -364,7 +271,7 @@ const MappingModal = ({ file, onClose, onSave }) => {
 
 // --- Page 3: Analysis Report ---
 const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
-    const { narrativeOverview, themes, sentiment, sentimentDistribution, verbatimQuotes, quantitativeResults, researchQuestion, soWhatActions } = results;
+    const { narrativeOverview, themes, sentiment, sentimentDistribution, verbatimQuotes, quantitativeResults, researchQuestion, soWhatActions = [] } = results;
     const DataSetOverview = ({ dataSet }) => {
         const textFilesCount = dataSet.filter(f => f.type === 'text').length;
         const spreadsheets = dataSet.filter(f => f.type === 'spreadsheet');
@@ -375,7 +282,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
     const SentimentDonutChart = ({ distribution }) => { const { positive, negative, neutral } = distribution; const conicGradient = `conic-gradient(#ef4444 0% ${negative}%, #84cc16 ${negative}% ${negative + positive}%, #95A3A6 ${negative + positive}% 100%)`; return (<div className="flex flex-col items-center"><div style={{ background: conicGradient }} className="w-32 h-32 rounded-full flex items-center justify-center"><div className="w-20 h-20 bg-[#3C4142] rounded-full"></div></div><div className="flex justify-center space-x-4 mt-4 text-sm"><div className="flex items-center"><span className="w-3 h-3 rounded-full bg-red-500 mr-2"></span>Negative ({negative}%)</div><div className="flex items-center"><span className="w-3 h-3 rounded-full bg-lime-500 mr-2"></span>Positive ({positive}%)</div><div className="flex items-center"><span className="w-3 h-3 rounded-full bg-[#95A3A6] mr-2"></span>Neutral ({neutral}%)</div></div></div>); };
     const SentimentSection = ({ sentiment, distribution }) => { const sentimentStyles = { Positive: { bgColor: 'bg-green-900/50', textColor: 'text-green-300', borderColor: 'border-green-500/30', emoji: '😊', label: 'Positive' }, Negative: { bgColor: 'bg-red-900/50', textColor: 'text-red-300', borderColor: 'border-red-500/30', emoji: '😞', label: 'Negative' }, Neutral: { bgColor: 'bg-gray-700', textColor: 'text-gray-300', borderColor: 'border-gray-600', emoji: '😐', label: 'Neutral' } }; const styles = sentimentStyles[sentiment] || sentimentStyles['Neutral']; return (<div className="p-4 rounded-lg border border-gray-700 bg-gray-800"><h3 className="text-lg font-semibold text-white mb-4 text-center">Overall Sentiment</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center"><div className={`p-4 rounded-lg border ${styles.borderColor} ${styles.bgColor}`}><div className="flex items-center justify-center"><span className="text-5xl mr-4">{styles.emoji}</span><span className={`text-3xl font-bold ${styles.textColor}`}>{styles.label}</span></div></div><SentimentDonutChart distribution={distribution} /></div></div>); };
     const NarrativeOverviewDisplay = ({ narrative }) => (<div className="p-5 rounded-lg border border-purple-500/20 bg-purple-900/20"><h3 className="text-xl font-semibold text-white mb-2">Overview</h3><p className="text-gray-300 leading-relaxed text-base">{narrative}</p></div>);
-    const SoWhatDisplay = ({ actions }) => (<div className="p-5 rounded-lg border border-teal-500/20 bg-teal-900/20"><h3 className="text-xl font-semibold text-white mb-3">So What? (Actions & Recommendations)</h3><ul className="list-disc list-inside space-y-2 text-gray-300">{actions.map((action, index) => (<li key={index}>{action}</li>))}</ul></div>);
+    const SoWhatDisplay = ({ actions }) => ( actions && actions.length > 0 && <div className="p-5 rounded-lg border border-teal-500/20 bg-teal-900/20"><h3 className="text-xl font-semibold text-white mb-3">So What? (Actions & Recommendations)</h3><ul className="list-disc list-inside space-y-2 text-gray-300">{actions.map((action, index) => (<li key={index}>{action}</li>))}</ul></div>);
     const ThematicAnalysisDisplay = ({ themes }) => ( themes && themes.length > 0 && <div className="p-4 rounded-lg border border-gray-700 bg-gray-800"><h3 className="text-lg font-semibold text-white mb-3">Thematic Analysis</h3><div className="space-y-4 mb-6"><h4 className="font-semibold text-gray-300">Theme Prominence</h4>{themes.map(theme => (<div key={theme.theme} className="w-full"><div className="flex items-center mb-1"><span className="text-lg mr-2">{theme.emoji}</span><span className="text-sm font-medium text-gray-300">{theme.theme}</span></div><div className="w-full bg-gray-700 rounded-full h-4"><div className="bg-green-500 h-4 rounded-full" style={{ width: `${theme.prominence * 10}%` }}></div></div></div>))}</div><hr className="my-6 border-gray-700"/><ul className="space-y-6">{themes.map((item, index) => (<li key={index} className="flex flex-col p-4 bg-gray-900 rounded-md shadow-sm"><div className="flex items-center mb-3"><span className="text-2xl mr-4">{item.emoji}</span><span className="text-white font-bold text-lg">{item.theme}</span></div><div className="space-y-3">{item.evidence.map((quote, qIndex) => (<blockquote key={qIndex} className="border-l-4 border-[#13BBAF] pl-4"><p className="text-gray-400 italic">"{quote}"</p></blockquote>))}</div></li>))}</ul></div>);
     const VerbatimQuotesDisplay = ({ quotes }) => ( quotes && quotes.length > 0 && <div className="p-4 rounded-lg border border-gray-700 bg-gray-800"><h3 className="text-lg font-semibold text-white mb-3">Key Verbatim Quotes</h3><ul className="space-y-4">{quotes.map((quote, index) => (<li key={index}><blockquote className="relative p-4 text-xl italic border-l-4 bg-gray-900 text-gray-300 border-gray-600 quote"><div className="stylistic-quote-mark" aria-hidden="true">&ldquo;</div><p className="mb-4">{quote}</p></blockquote></li>))}</ul></div>);
     const QuantitativeAnalysisDisplay = ({ quantData }) => {
