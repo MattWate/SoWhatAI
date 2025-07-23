@@ -334,7 +334,17 @@ export default function App() {
 
             const combinedText = [textFilesContent, spreadsheetText].filter(Boolean).join('\n\n---\n\n');
 
-            const results = await mockApiCall({ textData: combinedText, quantitativeData: quantitativePayload, researchQuestion });
+            const response = await fetch('/.netlify/functions/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ textData: combinedText, quantitativeData: quantitativePayload, researchQuestion })
+            });
+
+            if (!response.ok) {
+                throw new Error(`API call failed with status: ${response.status}`);
+            }
+
+            const results = await response.json();
             setAnalysisResults(results);
             setWorkflowStep('report');
         } catch (error) {
