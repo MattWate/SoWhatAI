@@ -1,5 +1,91 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 
+// --- Helper & Mock Data ---
+
+// This function simulates a call to the Gemini API.
+const mockApiCall = ({ textData, quantitativeData, researchQuestion }) => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      // --- Qualitative Analysis (from text) ---
+      const lowerCaseText = textData.toLowerCase();
+      let sentiment = 'Neutral';
+      let themes = [];
+      let narrativeOverview = `In response to the research question, "${researchQuestion}", the data presents a nuanced picture. While the overall sentiment leans positive, driven by strong appreciation for new collaboration features, a significant point of friction exists regarding performance. This suggests a classic tension between innovation and stability that needs to be addressed.`;
+      let sentimentDistribution = { positive: 45, negative: 25, neutral: 30 };
+
+      if (lowerCaseText.includes('happy') || lowerCaseText.includes('excellent') || lowerCaseText.includes('love')) {
+        sentiment = 'Positive';
+        narrativeOverview = `Regarding the question, "${researchQuestion}", the feedback is predominantly positive, indicating a successful launch. Users are particularly enthusiastic about the new collaboration tools. However, this is not universal. A key counterpoint emerges from power-users who are experiencing performance issues. The core challenge is to maintain this positive momentum while addressing performance to avoid alienating long-time users.`;
+        sentimentDistribution = { positive: 65, negative: 20, neutral: 15 };
+      }
+      
+      if (lowerCaseText.includes('customer') || lowerCaseText.includes('user')) {
+        themes.push({ theme: 'Customer Experience', emoji: '👥', evidence: ["Users love the new collaboration features...", "...report that the product is much more intuitive.", "Overall, I love the new collaboration features..."], prominence: 9 });
+      }
+      if (lowerCaseText.includes('software') || lowerCaseText.includes('product')) {
+        themes.push({ theme: 'Product Performance', emoji: '💻', evidence: ["...a few power-users have mentioned that the new interface feels slower...", "...for their specific workflows.", "the new interface feels a bit slower..."], prominence: 8 });
+      }
+       if (lowerCaseText.includes('team') || lowerCaseText.includes('collaboration')) {
+        themes.push({ theme: 'Team Alignment', emoji: '🤝', evidence: ["...the development team is concerned about the performance complaints.", "We need to find a balance.", "they make working with my team so much more intuitive."], prominence: 6 });
+      }
+      
+      const sentences = textData.match(/[^.!?]+[.!?]+/g) || [];
+      const keywords = ['love', 'slower', 'balance', 'intuitive'];
+      const verbatimQuotes = [];
+      const usedSentences = new Set();
+      keywords.forEach(keyword => {
+          const foundSentence = sentences.find(s => s.toLowerCase().includes(keyword) && !usedSentences.has(s));
+          if (foundSentence) { verbatimQuotes.push(foundSentence.trim()); usedSentences.add(foundSentence); }
+      });
+      if (verbatimQuotes.length === 0 && sentences.length > 0) { verbatimQuotes.push(sentences[0].trim()); }
+
+      // --- Quantitative Analysis (from spreadsheet) ---
+      let quantitativeResults = null;
+      if (quantitativeData && quantitativeData.length > 0) {
+          const resultsByFile = {};
+          quantitativeData.forEach(({ title, values, mapping, sourceFile }) => {
+              if (!resultsByFile[sourceFile]) {
+                  resultsByFile[sourceFile] = { stats: [], categories: [] };
+              }
+
+              if (mapping === 'stats' && values.length > 0) {
+                  const numbers = values.map(Number).filter(n => !isNaN(n));
+                  if (numbers.length > 0) {
+                    const sum = numbers.reduce((a, b) => a + b, 0);
+                    const mean = (sum / numbers.length).toFixed(2);
+                    const sorted = [...numbers].sort((a, b) => a - b);
+                    const median = sorted.length % 2 === 0 ? ((sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2).toFixed(2) : sorted[Math.floor(sorted.length / 2)];
+                    resultsByFile[sourceFile].stats.push({ title, mean, median, mode: 'N/A' });
+                  } else {
+                    resultsByFile[sourceFile].stats.push({ title, mean: null, median: null, mode: null, error: "Not numeric data" });
+                  }
+              } else if (mapping === 'category' && values.length > 0) {
+                  const counts = values.reduce((acc, val) => { acc[val] = (acc[val] || 0) + 1; return acc; }, {});
+                  const categoryData = Object.entries(counts).map(([name, count]) => ({ name, count }));
+                  resultsByFile[sourceFile].categories.push({ title, data: categoryData });
+              }
+          });
+          quantitativeResults = Object.entries(resultsByFile).map(([sourceFile, data]) => ({ sourceFile, ...data }));
+          
+          if(quantitativeResults.length > 0 && sentiment === 'Positive') {
+              narrativeOverview += " This positive sentiment appears to be consistent across different user demographics noted in the survey data."
+          }
+      }
+
+      resolve({
+        narrativeOverview,
+        themes: themes.sort((a,b) => b.prominence - a.prominence),
+        sentiment,
+        sentimentDistribution,
+        verbatimQuotes,
+        quantitativeResults,
+        researchQuestion
+      });
+    }, 1500);
+  });
+};
+
+
 // --- UI Components ---
 
 const Header = () => (
@@ -116,7 +202,7 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext }) => {
 
 
 // --- Page 2: Configuration Hub ---
-const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack }) => {
+const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) => {
     const [modalFileId, setModalFileId] = useState(null);
     const [researchQuestion, setResearchQuestion] = useState('');
 
@@ -147,7 +233,7 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack }) => {
                             </button>
                         )}
                         {file.type === 'text' && (
-                            <span className="text-sm text-green-400">Ready to Analyze</span>
+                            <span className="text-sm text-green-400">Ready to Analyse</span>
                         )}
                     </div>
                 ))}
@@ -170,9 +256,10 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack }) => {
             <div className="pt-5">
                 <div className="flex justify-end">
                     <button onClick={() => onAnalyze(researchQuestion)} className="w-full md:w-auto inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700">
-                        Analyze Full Data Set
+                        Analyse Full Data Set
                     </button>
                 </div>
+                 {error && <p className="text-red-400 text-sm mt-4 text-right">{error}</p>}
             </div>
             {modalFile && (
                 <MappingModal 
@@ -250,9 +337,9 @@ const MappingModal = ({ file, onClose, onSave }) => {
                                 <label className="font-medium truncate">{header}</label>
                                 <select value={columnMappings[header]} onChange={(e) => setColumnMappings(prev => ({...prev, [header]: e.target.value}))} className="rounded-md border-gray-600 bg-gray-700 text-white">
                                     <option value="ignore">Ignore</option>
-                                    <option value="text">Analyze for Themes</option>
+                                    <option value="text">Analyse for Themes</option>
                                     <option value="stats">Calculate Statistics</option>
-                                    <option value="category">Categorize</option>
+                                    <option value="category">Categorise</option>
                                 </select>
                             </div>
                         ))}
@@ -288,7 +375,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
         if (!quantData || quantData.length === 0) return null;
         return (<div className="p-4 rounded-lg border border-gray-700 bg-gray-800"><button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center"><h3 className="text-lg font-semibold text-white">Quantitative Analysis</h3><svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg></button>{isOpen && <div className="mt-4 space-y-8">{quantData.map(fileResult => (<div key={fileResult.sourceFile}><h4 className="font-semibold text-gray-200 text-md border-b border-gray-700 pb-2 mb-4">From: {fileResult.sourceFile}</h4><div className="space-y-6">{fileResult.stats.map(stat => (<div key={stat.title}><h5 className="font-semibold text-gray-300">{stat.title}</h5><div className="grid grid-cols-3 gap-4 mt-2 text-center">{stat.error ? (<p className="col-span-3 text-sm text-red-400 bg-red-900/50 p-2 rounded-md">{stat.error}</p>) : (<><div className="bg-gray-700 p-2 rounded-md"><p className="text-sm text-gray-400">Mean</p><p className="text-xl font-bold">{stat.mean ?? '-'}</p></div><div className="bg-gray-700 p-2 rounded-md"><p className="text-sm text-gray-400">Median</p><p className="text-xl font-bold">{stat.median ?? '-'}</p></div><div className="bg-gray-700 p-2 rounded-md"><p className="text-sm text-gray-400">Mode</p><p className="text-xl font-bold">{stat.mode ?? '-'}</p></div></>)}</div></div>))}{fileResult.categories.map(cat => (<div key={cat.title}><h5 className="font-semibold text-gray-300">{cat.title}</h5><div className="mt-2 space-y-2">{cat.data.map(item => (<div key={item.name} className="flex items-center"><span className="w-24 text-sm text-gray-400">{item.name}</span><div className="flex-1 bg-gray-700 rounded-full h-4"><div className="bg-green-500 h-4 rounded-full" style={{ width: `${(item.count / cat.data.reduce((max, i) => Math.max(max, i.count), 0)) * 100}%` }}></div></div><span className="ml-2 text-sm font-semibold">{item.count}</span></div>))}</div></div>))}</div></div>))}</div>}</div>);
     };
-    return (<div className="w-full bg-gray-900 rounded-lg shadow-xl p-6"><div className="flex justify-between items-center mb-6"><button onClick={onBack} className="inline-flex items-center px-4 py-2 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>Back to Data Set</button><h2 className="text-2xl font-semibold text-white">Analysis Report</h2><button onClick={() => onDownload(results)} className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>Download Report</button></div><div className="space-y-6"><DataSetOverview dataSet={dataSet} /><ResearchQuestionDisplay question={researchQuestion} /><NarrativeOverviewDisplay narrative={narrativeOverview} /><QuantitativeAnalysisDisplay quantData={quantitativeResults} /><SentimentSection sentiment={sentiment} distribution={sentimentDistribution} /><ThematicAnalysisDisplay themes={themes} /><VerbatimQuotesDisplay quotes={verbatimQuotes} /></div></div>);
+    return (<div className="w-full bg-gray-900 rounded-lg shadow-xl p-6"><div className="flex justify-between items-center mb-6"><button onClick={onBack} className="inline-flex items-center px-4 py-2 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>Back to Data Set</button><h2 className="text-2xl font-semibold text-white">Analysis Report</h2><button onClick={() => onDownload(results)} className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>Download Report</button></div><div className="space-y-6"><DataSetOverview dataSet={dataSet} /><ResearchQuestionDisplay question={researchQuestion} /><NarrativeOverviewDisplay narrative={narrativeOverview} /><SentimentSection sentiment={sentiment} distribution={sentimentDistribution} /><ThematicAnalysisDisplay themes={themes} /><VerbatimQuotesDisplay quotes={verbatimQuotes} /><QuantitativeAnalysisDisplay quantData={quantitativeResults} /></div></div>);
 };
 
 
@@ -299,6 +386,7 @@ export default function App() {
     const [dataSet, setDataSet] = useState([]);
     const [analysisResults, setAnalysisResults] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(null);
 
     const handleNextStep = () => {
         setWorkflowStep('configure');
@@ -306,6 +394,7 @@ export default function App() {
 
     const handleAnalysis = async (researchQuestion) => {
         setIsLoading(true);
+        setError(null);
         try {
             const textFilesContent = dataSet.filter(f => f.type === 'text').map(f => f.content).join('\n\n---\n\n');
             
@@ -341,7 +430,8 @@ export default function App() {
             });
 
             if (!response.ok) {
-                throw new Error(`API call failed with status: ${response.status}`);
+                const err = await response.json();
+                throw new Error(err.error || `API call failed with status: ${response.status}`);
             }
 
             const results = await response.json();
@@ -349,6 +439,8 @@ export default function App() {
             setWorkflowStep('report');
         } catch (error) {
             console.error("Analysis failed:", error);
+            setError(error.message);
+            setWorkflowStep('configure'); // Go back to config page to show error
         } finally {
             setIsLoading(false);
         }
@@ -365,7 +457,43 @@ export default function App() {
     }
 
     const handleDownloadReport = (results) => {
-        // Download logic remains the same
+        if (!results) return;
+        const { narrativeOverview, sentiment, sentimentDistribution, themes, verbatimQuotes, researchQuestion, quantitativeResults } = results;
+        let htmlContent = `<html><head><meta charset='utf-8'></head><body><h1>So What AI - Analysis Report</h1><h2>Research Question</h2><p><em>"${researchQuestion}"</em></p><h2>Overview</h2><p>${narrativeOverview}</p><h2>Overall Sentiment</h2><p><strong>${sentiment}</strong></p><h3>Sentiment Distribution</h3><p>Positive: ${sentimentDistribution.positive}%</p><p>Negative: ${sentimentDistribution.negative}%</p><p>Neutral: ${sentimentDistribution.neutral}%</p><br/><h2>Thematic Analysis</h2>`;
+        themes.forEach(theme => {
+            htmlContent += `<h3>${theme.emoji} ${theme.theme} (Prominence: ${theme.prominence}/10)</h3>`;
+            theme.evidence.forEach(ev => { htmlContent += `<p><em>"${ev}"</em></p>`; });
+            htmlContent += `<br/>`;
+        });
+        htmlContent += `<h2>Key Verbatim Quotes</h2>`;
+        verbatimQuotes.forEach(quote => { htmlContent += `<p><em>"${quote}"</em></p>`; });
+        
+        if (quantitativeResults && quantitativeResults.length > 0) {
+            htmlContent += `<h2>Quantitative Analysis</h2>`;
+            quantitativeResults.forEach(fileResult => {
+                htmlContent += `<h3>From: ${fileResult.sourceFile}</h3>`;
+                fileResult.stats.forEach(stat => {
+                    htmlContent += `<h4>${stat.title}</h4><p>Mean: ${stat.mean}, Median: ${stat.median}</p>`;
+                });
+                 fileResult.categories.forEach(cat => {
+                    htmlContent += `<h4>${cat.title}</h4>`;
+                    cat.data.forEach(item => {
+                        htmlContent += `<p>${item.name}: ${item.count}</p>`;
+                    });
+                });
+            });
+        }
+
+        htmlContent += `</body></html>`;
+        const blob = new Blob(['\ufeff', htmlContent], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'SoWhat-AI-Report.docx';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     };
 
     const renderPage = () => {
@@ -374,7 +502,7 @@ export default function App() {
         }
         switch (workflowStep) {
             case 'configure':
-                return <ConfigurationPage dataSet={dataSet} setDataSet={setDataSet} onAnalyze={handleAnalysis} onBack={handleBackToUpload} />;
+                return <ConfigurationPage dataSet={dataSet} setDataSet={setDataSet} onAnalyze={handleAnalysis} onBack={handleBackToUpload} error={error} />;
             case 'report':
                 return <AnalysisReportPage dataSet={dataSet} results={analysisResults} onBack={handleBackToConfig} onDownload={handleDownloadReport} />;
             case 'upload':
