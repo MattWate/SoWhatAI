@@ -1,5 +1,17 @@
+# This file tells Netlify how to build and deploy your site.
+# It should be in the root of your project folder (SoWhatAI/netlify.toml).
+
 [build]
+  # This is the command to build your React/Vite site.
   command = "npm run build"
-  publish = "build"
-[functions]
-  directory = "netlify/functions"
+  
+  # This tells Netlify where to find your serverless functions.
+  functions = "netlify/functions"
+  
+  # This is the corrected line. It tells Netlify that the final website
+  # is in a folder named "dist".
+  publish = "dist"
+
+[dev]
+  # This tells the local dev server (netlify dev) where to find your functions.
+  functions = "netlify/functions"
