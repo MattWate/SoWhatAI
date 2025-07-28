@@ -11,6 +11,25 @@
       body {
         background-color: #000000;
       }
+      /* Custom Animations for Aurora Background */
+      @keyframes aurora-1 {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        25% { transform: translate(40px, -20px) scale(1.1); }
+        50% { transform: translate(10px, 30px) scale(0.9); }
+        75% { transform: translate(-30px, 20px) scale(1); }
+      }
+      @keyframes aurora-2 {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        25% { transform: translate(-30px, 40px) scale(0.9); }
+        50% { transform: translate(20px, -10px) scale(1.1); }
+        75% { transform: translate(10px, -30px) scale(1); }
+      }
+      .animate-aurora-1 {
+        animation: aurora-1 15s infinite ease-in-out;
+      }
+      .animate-aurora-2 {
+        animation: aurora-2 18s infinite ease-in-out;
+      }
     </style>
   </head>
   <body>
@@ -18,9 +37,7 @@
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
     
-    <!-- This script tag is the entry point for your React application. 
-         If you're using a tool like Vite or Create React App, it will 
-         automatically handle bundling your App.jsx into this script. -->
+    <!-- This script tag is the entry point for your React application. -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
