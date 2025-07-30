@@ -6,7 +6,7 @@ import { supabase } from './supabaseClient'; // <-- IMPORT THE REAL SUPABASE CLI
 const Header = ({ user, onLogout, onNavigate }) => (
   <header className="bg-transparent sticky top-0 z-50">
     <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-      <h1 className="text-2xl font-bold leading-tight text-white cursor-pointer" onClick={() => onNavigate('home')}>So What <span className="text-[#EDC8FF]">AI</span></h1>
+      <h1 className="text-2xl font-bold leading-tight text-white cursor-pointer" onClick={() => onNavigate(user ? 'dashboard' : 'home')}>So What <span className="text-[#EDC8FF]">AI</span></h1>
       <div className="flex items-center space-x-4">
         {user ? (
           <button onClick={onLogout} className="text-sm font-medium text-gray-300 hover:text-white">
@@ -122,32 +122,57 @@ const LoginPage = ({ onLogin, onNavigate }) => {
     );
 };
 
-// --- Sub-components for the AnalysisToolPage ---
+// --- Page 3: Dashboard ---
+const DashboardPage = ({ user, onNavigate }) => {
+    const mockProjects = [
+        { id: 1, title: 'Q3 User Feedback', updated: '2 days ago', files: [{type: 'text', count: 5}, {type: 'spreadsheet', count: 1}] },
+        { id: 2, title: 'Competitor Analysis', updated: '1 week ago', files: [{type: 'text', count: 2}] },
+        { id: 3, title: 'Website Exit Survey', updated: '2 weeks ago', files: [{type: 'spreadsheet', count: 1}] },
+    ];
 
-const FileUploadPage = ({ dataSet, setDataSet, onNext }) => {
-    const fileInputRef = useRef(null);
-    return (<div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-6"><div className="flex justify-between items-center"><div><h2 className="text-2xl font-semibold text-white">Step 1: Build Your Data Set</h2><p className="text-sm text-gray-400">Add all your project files (.txt, .docx, .csv, .xlsx).</p></div>{dataSet.length > 0 && (<button onClick={() => setDataSet([])} className="inline-flex items-center px-3 py-2 border border-red-500/50 shadow-sm text-sm font-medium rounded-md text-red-400 bg-gray-800 hover:bg-gray-700">Clear Data Set</button>)}</div><div className="bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg p-8 text-center"><input type="file" ref={fileInputRef} onChange={() => {}} accept=".txt,.csv,.xlsx,.doc,.docx" className="hidden" multiple /><button onClick={() => fileInputRef.current.click()} className="inline-flex items-center px-4 py-2 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>Add File(s)</button></div><div><h3 className="font-semibold text-lg text-white">Files in Your Data Set:</h3><div className="mt-2 space-y-2">{dataSet.map(file => <p key={file.id} className="p-2 bg-gray-800/70 text-gray-300 rounded-md truncate">{file.name}</p>)}{dataSet.length === 0 && <p className="text-gray-500">No files uploaded.</p>}</div></div><div className="pt-5"><div className="flex justify-end"><button onClick={onNext} disabled={dataSet.length === 0} className="w-full md:w-auto inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-gradient-to-r from-[#13BBAF] to-teal-500 hover:from-teal-500 hover:to-teal-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105">Next: Configure Data</button></div></div></div>);
+    return (
+        <div className="space-y-8">
+            <div>
+                <h2 className="text-3xl font-bold text-white">Welcome back, {user?.email.split('@')[0]}</h2>
+                <p className="text-gray-400 mt-1">Ready to find the "So What?" in your data?</p>
+            </div>
+            <button onClick={() => onNavigate('app')} className="w-full md:w-auto inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-black bg-[#EDC8FF] hover:bg-purple-200 transition-colors transform hover:scale-105">
+                + Create New Project
+            </button>
+            <hr className="border-gray-700/50" />
+            <div>
+                <h3 className="text-2xl font-semibold text-white mb-4">Your Projects</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {mockProjects.map(project => (
+                        <div key={project.id} className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 flex flex-col justify-between">
+                            <div>
+                                <h4 className="font-bold text-lg text-white">{project.title}</h4>
+                                <p className="text-xs text-gray-400 mt-1">Last updated: {project.updated}</p>
+                                <div className="mt-4 flex flex-wrap gap-2">
+                                    {project.files.map(f => (
+                                        <span key={f.type} className="text-xs font-medium bg-gray-700 text-gray-300 px-2 py-1 rounded-full">
+                                            {f.type === 'text' ? `📁 ${f.count} Text files` : `📊 ${f.count} Spreadsheet`}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="mt-6 flex items-center space-x-3">
+                                <button className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-[#13BBAF] hover:bg-teal-600 rounded-md transition-colors">View Report</button>
+                                <button className="px-4 py-2 text-sm font-semibold text-gray-300 bg-gray-700 hover:bg-gray-600 rounded-md transition-colors">Reuse</button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
 };
 
-const MappingModal = ({ file, onClose, onSave }) => {
-    const [columnMappings, setColumnMappings] = useState(file.mappings || {});
-    return (<div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4"><div className="bg-gray-800 text-white rounded-lg shadow-xl p-6 space-y-4 w-full max-w-lg"><h3 className="text-lg font-semibold">Map Columns for: {file.name}</h3><div className="space-y-2 max-h-96 overflow-y-auto p-1">{file.headers.map(header => (<div key={header} className="grid grid-cols-2 gap-4 items-center"><label className="font-medium truncate">{header}</label><select value={columnMappings[header]} onChange={(e) => setColumnMappings(prev => ({...prev, [header]: e.target.value}))} className="rounded-md border-gray-600 bg-gray-700 text-white"><option value="ignore">Ignore</option><option value="text">Analyse for Themes</option><option value="stats">Calculate Statistics</option><option value="category">Categorise</option></select></div>))}</div><div className="flex justify-end space-x-3 pt-4"><button onClick={onClose} className="px-4 py-2 bg-gray-600 rounded-md">Cancel</button><button onClick={() => onSave(file.id, columnMappings)} className="px-4 py-2 bg-[#13BBAF] text-white rounded-md">Save Mappings</button></div></div></div>);
-};
 
-const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) => {
-    const [modalFileId, setModalFileId] = useState(null);
-    const [researchQuestion, setResearchQuestion] = useState('');
-    const handleMappingsUpdate = (fileId, newMappings) => { setDataSet(prevDataSet => prevDataSet.map(file => file.id === fileId ? { ...file, mappings: newMappings } : file)); };
-    const modalFile = dataSet.find(f => f.id === modalFileId);
-    return (<div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-6"><button onClick={onBack} className="text-sm font-medium text-[#13BBAF] hover:text-teal-400">&larr; Back to upload</button><div><h2 className="text-2xl font-semibold text-white">Step 2: Configure Your Data Set</h2><p className="text-sm text-gray-400">Map columns for each spreadsheet and provide your research question.</p></div><div className="space-y-3"><h3 className="font-semibold text-lg text-white">Files:</h3>{dataSet.map(file => (<div key={file.id} className="flex items-center justify-between p-3 bg-gray-800/70 rounded-md"><span className="font-medium text-gray-300 truncate">{file.name}</span>{file.type === 'spreadsheet' && (<button onClick={() => setModalFileId(file.id)} className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#13BBAF] hover:bg-teal-600 transition-colors">Map Columns</button>)}{file.type === 'text' && (<span className="text-sm text-green-400">Ready to Analyse</span>)}</div>))}</div><div><label htmlFor="research-question" className="block text-lg font-semibold text-white">Research Question</label><div className="mt-1"><textarea id="research-question" rows={3} className="shadow-sm focus:ring-[#13BBAF] focus:border-[#13BBAF] block w-full sm:text-sm border-gray-600 bg-gray-800 text-white rounded-md p-2" placeholder="e.g., How do our power-users feel about the new interface performance?" value={researchQuestion} onChange={(e) => setResearchQuestion(e.target.value)} /></div></div><div className="pt-5"><div className="flex justify-end"><button onClick={() => onAnalyze(researchQuestion)} className="w-full md:w-auto inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 transition-colors transform hover:scale-105">Analyse Full Data Set</button></div>{error && <p className="text-red-400 text-sm mt-4 text-right">{error}</p>}</div>{modalFile && (<MappingModal file={modalFile} onClose={() => setModalFileId(null)} onSave={handleMappingsUpdate} />)}</div>);
-};
-
-const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
-    return <div className="text-white">Analysis Report Page</div>; // Placeholder
-};
-
-// --- Page 3: The Main Application ---
-const AnalysisToolPage = () => {
+// --- Page 4: The Main Application ---
+const AnalysisToolPage = ({ onNavigate }) => {
+    // This component now only contains the logic for the analysis tool itself.
+    // All sub-components are defined below it.
     const [workflowStep, setWorkflowStep] = useState('upload'); // upload, configure, report
     const [dataSet, setDataSet] = useState([]);
     const [analysisResults, setAnalysisResults] = useState(null);
@@ -181,12 +206,37 @@ const AnalysisToolPage = () => {
                 return <AnalysisReportPage dataSet={dataSet} results={analysisResults} onBack={handleBackToConfig} onDownload={handleDownloadReport} />;
             case 'upload':
             default:
-                return <FileUploadPage dataSet={dataSet} setDataSet={setDataSet} onNext={handleNextStep} />;
+                return <FileUploadPage dataSet={dataSet} setDataSet={setDataSet} onNext={handleNextStep} onDashboardNavigate={() => onNavigate('dashboard')} />;
         }
     };
     
     return renderPage();
 };
+
+// --- Sub-components for the AnalysisToolPage ---
+
+const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) => {
+    const fileInputRef = useRef(null);
+    return (<div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-6"><button onClick={onDashboardNavigate} className="text-sm font-medium text-[#13BBAF] hover:text-teal-400">&larr; Back to Dashboard</button><div className="flex justify-between items-center"><div><h2 className="text-2xl font-semibold text-white">Step 1: Build Your Data Set</h2><p className="text-sm text-gray-400">Add all your project files (.txt, .docx, .csv, .xlsx).</p></div>{dataSet.length > 0 && (<button onClick={() => setDataSet([])} className="inline-flex items-center px-3 py-2 border border-red-500/50 shadow-sm text-sm font-medium rounded-md text-red-400 bg-gray-800 hover:bg-gray-700">Clear Data Set</button>)}</div><div className="bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg p-8 text-center"><input type="file" ref={fileInputRef} onChange={() => {}} accept=".txt,.csv,.xlsx,.doc,.docx" className="hidden" multiple /><button onClick={() => fileInputRef.current.click()} className="inline-flex items-center px-4 py-2 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>Add File(s)</button></div><div><h3 className="font-semibold text-lg text-white">Files in Your Data Set:</h3><div className="mt-2 space-y-2">{dataSet.map(file => <p key={file.id} className="p-2 bg-gray-800/70 text-gray-300 rounded-md truncate">{file.name}</p>)}{dataSet.length === 0 && <p className="text-gray-500">No files uploaded.</p>}</div></div><div className="pt-5"><div className="flex justify-end"><button onClick={onNext} disabled={dataSet.length === 0} className="w-full md:w-auto inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-gradient-to-r from-[#13BBAF] to-teal-500 hover:from-teal-500 hover:to-teal-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105">Next: Configure Data</button></div></div></div>);
+};
+
+const MappingModal = ({ file, onClose, onSave }) => {
+    const [columnMappings, setColumnMappings] = useState(file.mappings || {});
+    return (<div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4"><div className="bg-gray-800 text-white rounded-lg shadow-xl p-6 space-y-4 w-full max-w-lg"><h3 className="text-lg font-semibold">Map Columns for: {file.name}</h3><div className="space-y-2 max-h-96 overflow-y-auto p-1">{file.headers.map(header => (<div key={header} className="grid grid-cols-2 gap-4 items-center"><label className="font-medium truncate">{header}</label><select value={columnMappings[header]} onChange={(e) => setColumnMappings(prev => ({...prev, [header]: e.target.value}))} className="rounded-md border-gray-600 bg-gray-700 text-white"><option value="ignore">Ignore</option><option value="text">Analyse for Themes</option><option value="stats">Calculate Statistics</option><option value="category">Categorise</option></select></div>))}</div><div className="flex justify-end space-x-3 pt-4"><button onClick={onClose} className="px-4 py-2 bg-gray-600 rounded-md">Cancel</button><button onClick={() => onSave(file.id, columnMappings)} className="px-4 py-2 bg-[#13BBAF] text-white rounded-md">Save Mappings</button></div></div></div>);
+};
+
+const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) => {
+    const [modalFileId, setModalFileId] = useState(null);
+    const [researchQuestion, setResearchQuestion] = useState('');
+    const handleMappingsUpdate = (fileId, newMappings) => { setDataSet(prevDataSet => prevDataSet.map(file => file.id === fileId ? { ...file, mappings: newMappings } : file)); };
+    const modalFile = dataSet.find(f => f.id === modalFileId);
+    return (<div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-6"><button onClick={onBack} className="text-sm font-medium text-[#13BBAF] hover:text-teal-400">&larr; Back to upload</button><div><h2 className="text-2xl font-semibold text-white">Step 2: Configure Your Data Set</h2><p className="text-sm text-gray-400">Map columns for each spreadsheet and provide your research question.</p></div><div className="space-y-3"><h3 className="font-semibold text-lg text-white">Files:</h3>{dataSet.map(file => (<div key={file.id} className="flex items-center justify-between p-3 bg-gray-800/70 rounded-md"><span className="font-medium text-gray-300 truncate">{file.name}</span>{file.type === 'spreadsheet' && (<button onClick={() => setModalFileId(file.id)} className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#13BBAF] hover:bg-teal-600 transition-colors">Map Columns</button>)}{file.type === 'text' && (<span className="text-sm text-green-400">Ready to Analyse</span>)}</div>))}</div><div><label htmlFor="research-question" className="block text-lg font-semibold text-white">Research Question</label><div className="mt-1"><textarea id="research-question" rows={3} className="shadow-sm focus:ring-[#13BBAF] focus:border-[#13BBAF] block w-full sm:text-sm border-gray-600 bg-gray-800 text-white rounded-md p-2" placeholder="e.g., How do our power-users feel about the new interface performance?" value={researchQuestion} onChange={(e) => setResearchQuestion(e.target.value)} /></div></div><div className="pt-5"><div className="flex justify-end"><button onClick={() => onAnalyze(researchQuestion)} className="w-full md:w-auto inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 transition-colors transform hover:scale-105">Analyse Full Data Set</button></div>{error && <p className="text-red-400 text-sm mt-4 text-right">{error}</p>}</div>{modalFile && (<MappingModal file={modalFile} onClose={() => setModalFileId(null)} onSave={handleMappingsUpdate} />)}</div>);
+};
+
+const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
+    return <div className="text-white">Analysis Report Page</div>; // Placeholder
+};
+
 
 // --- Main App Component (acts as a router) ---
 
@@ -198,7 +248,7 @@ export default function App() {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
           const currentUser = session?.user ?? null;
           setUser(currentUser);
-          if (!currentUser && page === 'app') {
+          if (!currentUser && (page === 'app' || page === 'dashboard')) {
               setPage('home');
           }
         });
@@ -207,7 +257,7 @@ export default function App() {
 
     const handleLogin = (loggedInUser) => {
         setUser(loggedInUser);
-        setPage('app');
+        setPage('dashboard');
     };
 
     const handleLogout = async () => {
@@ -217,24 +267,25 @@ export default function App() {
     };
     
     const handleNavigate = (destination) => {
-        if (destination === 'app' && !user) {
+        if (!user && (destination === 'app' || destination === 'dashboard')) {
             setPage('login');
-        } else if (user) {
-            setPage('app');
-        }
-        else {
+        } else {
             setPage(destination);
         }
     };
 
     const renderContent = () => {
-        if (page === 'app' && user) {
-            return <AnalysisToolPage />;
+        switch (page) {
+            case 'login':
+                return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
+            case 'app':
+                return user ? <AnalysisToolPage onNavigate={handleNavigate} /> : <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
+            case 'dashboard':
+                 return user ? <DashboardPage user={user} onNavigate={handleNavigate} /> : <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
+            case 'home':
+            default:
+                return <HomePage onNavigate={handleNavigate} />;
         }
-        if (page === 'login') {
-            return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
-        }
-        return <HomePage onNavigate={handleNavigate} />;
     };
 
     return (
