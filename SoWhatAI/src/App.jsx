@@ -124,11 +124,8 @@ const LoginPage = ({ onLogin, onNavigate }) => {
 
 // --- Page 3: Dashboard ---
 const DashboardPage = ({ user, onNavigate }) => {
-    const mockProjects = [
-        { id: 1, title: 'Q3 User Feedback', updated: '2 days ago', files: [{type: 'text', count: 5}, {type: 'spreadsheet', count: 1}] },
-        { id: 2, title: 'Competitor Analysis', updated: '1 week ago', files: [{type: 'text', count: 2}] },
-        { id: 3, title: 'Website Exit Survey', updated: '2 weeks ago', files: [{type: 'spreadsheet', count: 1}] },
-    ];
+    // In a real app, this would be fetched from your Supabase database
+    const [projects, setProjects] = useState([]); 
 
     return (
         <div className="space-y-8">
@@ -142,27 +139,17 @@ const DashboardPage = ({ user, onNavigate }) => {
             <hr className="border-gray-700/50" />
             <div>
                 <h3 className="text-2xl font-semibold text-white mb-4">Your Projects</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {mockProjects.map(project => (
-                        <div key={project.id} className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 flex flex-col justify-between">
-                            <div>
-                                <h4 className="font-bold text-lg text-white">{project.title}</h4>
-                                <p className="text-xs text-gray-400 mt-1">Last updated: {project.updated}</p>
-                                <div className="mt-4 flex flex-wrap gap-2">
-                                    {project.files.map(f => (
-                                        <span key={f.type} className="text-xs font-medium bg-gray-700 text-gray-300 px-2 py-1 rounded-full">
-                                            {f.type === 'text' ? `📁 ${f.count} Text files` : `📊 ${f.count} Spreadsheet`}
-                                        </span>
-                                    ))}
-                                </div>
-                            </div>
-                            <div className="mt-6 flex items-center space-x-3">
-                                <button className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-[#13BBAF] hover:bg-teal-600 rounded-md transition-colors">View Report</button>
-                                <button className="px-4 py-2 text-sm font-semibold text-gray-300 bg-gray-700 hover:bg-gray-600 rounded-md transition-colors">Reuse</button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                {projects.length === 0 ? (
+                    <div className="text-center py-12 bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
+                        <h4 className="mt-4 text-lg font-semibold text-white">No projects yet</h4>
+                        <p className="mt-1 text-sm text-gray-400">Click "Create New Project" to get started.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {/* This is where you would map over your real projects */}
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -171,9 +158,7 @@ const DashboardPage = ({ user, onNavigate }) => {
 
 // --- Page 4: The Main Application ---
 const AnalysisToolPage = ({ onNavigate }) => {
-    // This component now only contains the logic for the analysis tool itself.
-    // All sub-components are defined below it.
-    const [workflowStep, setWorkflowStep] = useState('upload'); // upload, configure, report
+    const [workflowStep, setWorkflowStep] = useState('upload');
     const [dataSet, setDataSet] = useState([]);
     const [analysisResults, setAnalysisResults] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -184,7 +169,7 @@ const AnalysisToolPage = ({ onNavigate }) => {
     const handleAnalysis = async (researchQuestion) => {
         setIsLoading(true);
         setError(null);
-        // ... analysis logic from previous versions
+        // ... analysis logic
         const results = { researchQuestion, soWhatActions: ["Example action 1", "Example action 2"], themes: [], verbatimQuotes: [], quantitativeResults: [], sentiment: 'Neutral', sentimentDistribution: {positive: 0, negative: 0, neutral: 100} };
         setAnalysisResults(results);
         setWorkflowStep('report');
@@ -217,7 +202,45 @@ const AnalysisToolPage = ({ onNavigate }) => {
 
 const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) => {
     const fileInputRef = useRef(null);
-    return (<div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-6"><button onClick={onDashboardNavigate} className="text-sm font-medium text-[#13BBAF] hover:text-teal-400">&larr; Back to Dashboard</button><div className="flex justify-between items-center"><div><h2 className="text-2xl font-semibold text-white">Step 1: Build Your Data Set</h2><p className="text-sm text-gray-400">Add all your project files (.txt, .docx, .csv, .xlsx).</p></div>{dataSet.length > 0 && (<button onClick={() => setDataSet([])} className="inline-flex items-center px-3 py-2 border border-red-500/50 shadow-sm text-sm font-medium rounded-md text-red-400 bg-gray-800 hover:bg-gray-700">Clear Data Set</button>)}</div><div className="bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg p-8 text-center"><input type="file" ref={fileInputRef} onChange={() => {}} accept=".txt,.csv,.xlsx,.doc,.docx" className="hidden" multiple /><button onClick={() => fileInputRef.current.click()} className="inline-flex items-center px-4 py-2 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>Add File(s)</button></div><div><h3 className="font-semibold text-lg text-white">Files in Your Data Set:</h3><div className="mt-2 space-y-2">{dataSet.map(file => <p key={file.id} className="p-2 bg-gray-800/70 text-gray-300 rounded-md truncate">{file.name}</p>)}{dataSet.length === 0 && <p className="text-gray-500">No files uploaded.</p>}</div></div><div className="pt-5"><div className="flex justify-end"><button onClick={onNext} disabled={dataSet.length === 0} className="w-full md:w-auto inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-gradient-to-r from-[#13BBAF] to-teal-500 hover:from-teal-500 hover:to-teal-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105">Next: Configure Data</button></div></div></div>);
+    
+    const handleFileChange = (event) => {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
+
+        const filePromises = Array.from(files).map(file => {
+            return new Promise((resolve) => {
+                if (file.name.endsWith('.txt')) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve({ id: Date.now() + file.name, name: file.name, type: 'text', content: e.target.result });
+                    reader.readAsText(file);
+                } else if (file.name.endsWith('.docx') || file.name.endsWith('.doc')) {
+                    if (window.mammoth) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            window.mammoth.extractRawText({ arrayBuffer: e.target.result })
+                                .then(result => resolve({ id: Date.now() + file.name, name: file.name, type: 'text', content: result.value }))
+                                .catch(() => resolve(null));
+                        };
+                        reader.readAsArrayBuffer(file);
+                    } else {
+                        resolve(null);
+                    }
+                } else if (file.name.endsWith('.csv') || file.name.endsWith('.xlsx')) {
+                    resolve({ id: Date.now() + file.name, name: file.name, type: 'spreadsheet', fileObject: file, mappings: {}, rows: [], headers: [] });
+                } else {
+                    resolve(null);
+                }
+            });
+        });
+
+        Promise.all(filePromises).then(newFiles => {
+            setDataSet(prev => [...prev, ...newFiles.filter(Boolean)]);
+        });
+
+        event.target.value = null;
+    };
+
+    return (<div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-6"><button onClick={onDashboardNavigate} className="text-sm font-medium text-[#13BBAF] hover:text-teal-400">&larr; Back to Dashboard</button><div className="flex justify-between items-center"><div><h2 className="text-2xl font-semibold text-white">Step 1: Build Your Data Set</h2><p className="text-sm text-gray-400">Add all your project files (.txt, .docx, .csv, .xlsx).</p></div>{dataSet.length > 0 && (<button onClick={() => setDataSet([])} className="inline-flex items-center px-3 py-2 border border-red-500/50 shadow-sm text-sm font-medium rounded-md text-red-400 bg-gray-800 hover:bg-gray-700">Clear Data Set</button>)}</div><div className="bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg p-8 text-center"><input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".txt,.csv,.xlsx,.doc,.docx" className="hidden" multiple /><button onClick={() => fileInputRef.current.click()} className="inline-flex items-center px-4 py-2 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>Add File(s)</button></div><div><h3 className="font-semibold text-lg text-white">Files in Your Data Set:</h3><div className="mt-2 space-y-2">{dataSet.map(file => <p key={file.id} className="p-2 bg-gray-800/70 text-gray-300 rounded-md truncate">{file.name}</p>)}{dataSet.length === 0 && <p className="text-gray-500">No files uploaded.</p>}</div></div><div className="pt-5"><div className="flex justify-end"><button onClick={onNext} disabled={dataSet.length === 0} className="w-full md:w-auto inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-gradient-to-r from-[#13BBAF] to-teal-500 hover:from-teal-500 hover:to-teal-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105">Next: Configure Data</button></div></div></div>);
 };
 
 const MappingModal = ({ file, onClose, onSave }) => {
@@ -275,13 +298,19 @@ export default function App() {
     };
 
     const renderContent = () => {
+        if (user) {
+            switch (page) {
+                case 'app':
+                    return <AnalysisToolPage onNavigate={handleNavigate} />;
+                case 'dashboard':
+                default:
+                    return <DashboardPage user={user} onNavigate={handleNavigate} />;
+            }
+        }
+        
         switch (page) {
             case 'login':
                 return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
-            case 'app':
-                return user ? <AnalysisToolPage onNavigate={handleNavigate} /> : <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
-            case 'dashboard':
-                 return user ? <DashboardPage user={user} onNavigate={handleNavigate} /> : <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
             case 'home':
             default:
                 return <HomePage onNavigate={handleNavigate} />;
