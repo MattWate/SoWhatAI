@@ -124,7 +124,6 @@ const LoginPage = ({ onLogin, onNavigate }) => {
 
 // --- Page 3: Dashboard ---
 const DashboardPage = ({ user, onNavigate }) => {
-    // In a real app, this would be fetched from your Supabase database
     const [projects, setProjects] = useState([]); 
 
     return (
@@ -155,48 +154,6 @@ const DashboardPage = ({ user, onNavigate }) => {
     );
 };
 
-
-// --- Page 4: The Main Application ---
-const AnalysisToolPage = ({ onNavigate }) => {
-    const [workflowStep, setWorkflowStep] = useState('upload');
-    const [dataSet, setDataSet] = useState([]);
-    const [analysisResults, setAnalysisResults] = useState(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState(null);
-
-    const handleNextStep = () => setWorkflowStep('configure');
-    
-    const handleAnalysis = async (researchQuestion) => {
-        setIsLoading(true);
-        setError(null);
-        // ... analysis logic
-        const results = { researchQuestion, soWhatActions: ["Example action 1", "Example action 2"], themes: [], verbatimQuotes: [], quantitativeResults: [], sentiment: 'Neutral', sentimentDistribution: {positive: 0, negative: 0, neutral: 100} };
-        setAnalysisResults(results);
-        setWorkflowStep('report');
-        setIsLoading(false);
-    };
-
-    const handleBackToUpload = () => { setWorkflowStep('upload'); setAnalysisResults(null); };
-    const handleBackToConfig = () => { setWorkflowStep('configure'); setAnalysisResults(null); };
-    const handleDownloadReport = (results) => { /* Download logic */ };
-
-    const renderPage = () => {
-        if (isLoading) {
-            return <div className="w-full p-6 flex flex-col items-center justify-center bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg mt-8 shadow-2xl"><div className="animate-pulse rounded-full h-16 w-16 bg-teal-500/50"></div><p className="mt-4 text-gray-300">Synthesizing insights...</p></div>
-        }
-        switch (workflowStep) {
-            case 'configure':
-                return <ConfigurationPage dataSet={dataSet} setDataSet={setDataSet} onAnalyze={handleAnalysis} onBack={handleBackToUpload} error={error} />;
-            case 'report':
-                return <AnalysisReportPage dataSet={dataSet} results={analysisResults} onBack={handleBackToConfig} onDownload={handleDownloadReport} />;
-            case 'upload':
-            default:
-                return <FileUploadPage dataSet={dataSet} setDataSet={setDataSet} onNext={handleNextStep} onDashboardNavigate={() => onNavigate('dashboard')} />;
-        }
-    };
-    
-    return renderPage();
-};
 
 // --- Sub-components for the AnalysisToolPage ---
 
@@ -260,6 +217,47 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
     return <div className="text-white">Analysis Report Page</div>; // Placeholder
 };
 
+// --- Page 3: The Main Application ---
+const AnalysisToolPage = ({ onNavigate }) => {
+    const [workflowStep, setWorkflowStep] = useState('upload');
+    const [dataSet, setDataSet] = useState([]);
+    const [analysisResults, setAnalysisResults] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    const handleNextStep = () => setWorkflowStep('configure');
+    
+    const handleAnalysis = async (researchQuestion) => {
+        setIsLoading(true);
+        setError(null);
+        // ... analysis logic
+        const results = { researchQuestion, soWhatActions: ["Example action 1", "Example action 2"], themes: [], verbatimQuotes: [], quantitativeResults: [], sentiment: 'Neutral', sentimentDistribution: {positive: 0, negative: 0, neutral: 100} };
+        setAnalysisResults(results);
+        setWorkflowStep('report');
+        setIsLoading(false);
+    };
+
+    const handleBackToUpload = () => { setWorkflowStep('upload'); setAnalysisResults(null); };
+    const handleBackToConfig = () => { setWorkflowStep('configure'); setAnalysisResults(null); };
+    const handleDownloadReport = (results) => { /* Download logic */ };
+
+    const renderPage = () => {
+        if (isLoading) {
+            return <div className="w-full p-6 flex flex-col items-center justify-center bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg mt-8 shadow-2xl"><div className="animate-pulse rounded-full h-16 w-16 bg-teal-500/50"></div><p className="mt-4 text-gray-300">Synthesizing insights...</p></div>
+        }
+        switch (workflowStep) {
+            case 'configure':
+                return <ConfigurationPage dataSet={dataSet} setDataSet={setDataSet} onAnalyze={handleAnalysis} onBack={handleBackToUpload} error={error} />;
+            case 'report':
+                return <AnalysisReportPage dataSet={dataSet} results={analysisResults} onBack={handleBackToConfig} onDownload={handleDownloadReport} />;
+            case 'upload':
+            default:
+                return <FileUploadPage dataSet={dataSet} setDataSet={setDataSet} onNext={handleNextStep} onDashboardNavigate={() => onNavigate('dashboard')} />;
+        }
+    };
+    
+    return renderPage();
+};
 
 // --- Main App Component (acts as a router) ---
 
