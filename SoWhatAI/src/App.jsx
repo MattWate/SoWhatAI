@@ -159,7 +159,7 @@ const DashboardPage = ({ user, onNavigate }) => {
 
 const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) => {
     const fileInputRef = useRef(null);
-
+    
     const handleFileChange = (event) => {
         const files = event.target.files;
         if (!files || files.length === 0) return;
@@ -356,11 +356,47 @@ const AnalysisToolPage = ({ onNavigate }) => {
     const handleAnalysis = async (researchQuestion) => {
         setIsLoading(true);
         setError(null);
-        // ... analysis logic
-        const results = { researchQuestion, soWhatActions: ["Example action 1", "Example action 2"], themes: [], verbatimQuotes: [], quantitativeResults: [], sentiment: 'Neutral', sentimentDistribution: {positive: 0, negative: 0, neutral: 100} };
-        setAnalysisResults(results);
-        setWorkflowStep('report');
-        setIsLoading(false);
+        try {
+            const textFilesContent = dataSet.filter(f => f.type === 'text').map(f => f.content).join('\n\n---\n\n');
+            const spreadsheets = dataSet.filter(f => f.type === 'spreadsheet');
+            let spreadsheetText = '';
+            let quantitativePayload = [];
+
+            spreadsheets.forEach(sheet => {
+                if(sheet.rows && sheet.headers) {
+                    const textColumns = sheet.headers.filter(header => sheet.mappings[header] === 'text');
+                    spreadsheetText += sheet.rows.map(row => textColumns.map(header => row[header]).join(' ')).join('\n');
+                    sheet.headers.forEach(header => {
+                        const mapping = sheet.mappings[header];
+                        if (mapping === 'stats' || mapping === 'category') {
+                            quantitativePayload.push({ title: header, values: sheet.rows.map(row => row[header]).filter(Boolean), mapping, sourceFile: sheet.name });
+                        }
+                    });
+                }
+            });
+
+            const combinedText = [textFilesContent, spreadsheetText].filter(Boolean).join('\n\n---\n\n');
+            const response = await fetch('/.netlify/functions/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ textData: combinedText, quantitativeData: quantitativePayload, researchQuestion })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || `API call failed with status: ${response.status}`);
+            }
+
+            const results = await response.json();
+            setAnalysisResults(results);
+            setWorkflowStep('report');
+        } catch (error) {
+            console.error("Analysis failed:", error);
+            setError(error.message);
+            setWorkflowStep('configure');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleBackToUpload = () => { setWorkflowStep('upload'); setAnalysisResults(null); };
