@@ -6,13 +6,7 @@ import { supabase } from './supabaseClient'; // <-- IMPORT THE REAL SUPABASE CLI
 const Header = ({ user, onLogout, onNavigate }) => (
   <header className="bg-transparent sticky top-0 z-50">
     <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-      <h1 className="text-2xl font-bold leading-tight text-white">So What <span className="text-[#EDC8FF]">AI</span></h1>
-      <nav className="hidden md:flex items-center space-x-8 text-sm font-medium text-gray-300">
-        <a href="#" className="hover:text-white">Features</a>
-        <a href="#" className="hover:text-white">Solutions</a>
-        <a href="#" className="hover:text-white">Pricing</a>
-        <a href="#" className="hover:text-white">Resources</a>
-      </nav>
+      <h1 className="text-2xl font-bold leading-tight text-white cursor-pointer" onClick={() => onNavigate('home')}>So What <span className="text-[#EDC8FF]">AI</span></h1>
       <div className="flex items-center space-x-4">
         {user ? (
           <button onClick={onLogout} className="text-sm font-medium text-gray-300 hover:text-white">
@@ -37,7 +31,7 @@ const Footer = () => (
 
 // --- Page 1: Home Page ---
 const HomePage = ({ onNavigate }) => (
-    <div className="text-center py-24 sm:py-32">
+    <div className="text-center py-16 sm:py-24">
         <h1 className="text-5xl sm:text-7xl font-extrabold text-white tracking-tight">
             From <span className="text-[#EDC8FF]">Data</span> to <span className="text-[#13BBAF]">'So What?'</span>,
             <br />
@@ -50,10 +44,20 @@ const HomePage = ({ onNavigate }) => (
             <button onClick={() => onNavigate('login')} className="px-6 py-3 text-base font-semibold text-black bg-[#EDC8FF] rounded-md shadow-lg hover:bg-purple-200 transition-colors transform hover:scale-105">
                 Get Started for Free
             </button>
-            <button className="flex items-center gap-x-2 text-base font-semibold text-white hover:text-gray-300">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm14.024-.983a1.125 1.125 0 0 1 0 1.966l-5.603 3.113A1.125 1.125 0 0 1 9 15.113V8.887c0-.857.921-1.4 1.671-.983l5.603 3.113Z" clipRule="evenodd" /></svg>
-                Watch Demo
-            </button>
+        </div>
+        <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+            <div className="p-6 bg-gray-800/50 rounded-lg border border-gray-700">
+                <h3 className="text-lg font-semibold text-white">Mixed-Method Analysis</h3>
+                <p className="mt-2 text-gray-400">Combine interview transcripts (.txt, .docx) with survey data (.csv, .xlsx) in a single, unified project.</p>
+            </div>
+            <div className="p-6 bg-gray-800/50 rounded-lg border border-gray-700">
+                <h3 className="text-lg font-semibold text-white">AI-Powered Synthesis</h3>
+                <p className="mt-2 text-gray-400">Leverage AI to generate narrative overviews, key themes, and actionable "So What?" recommendations automatically.</p>
+            </div>
+            <div className="p-6 bg-gray-800/50 rounded-lg border border-gray-700">
+                <h3 className="text-lg font-semibold text-white">Interactive Reports</h3>
+                <p className="mt-2 text-gray-400">Explore your findings with interactive charts and downloadable reports, ready for your stakeholders.</p>
+            </div>
         </div>
     </div>
 );
@@ -86,7 +90,6 @@ const LoginPage = ({ onLogin, onNavigate }) => {
         if (error) {
             setError(error.message);
         } else {
-            // In a real app, you might want to show a "Check your email to confirm" message here
             onLogin(data.user);
         }
         setIsSubmitting(false);
@@ -119,48 +122,6 @@ const LoginPage = ({ onLogin, onNavigate }) => {
     );
 };
 
-// --- Page 3: The Main Application ---
-const AnalysisToolPage = () => {
-    // This component now only contains the logic for the analysis tool itself.
-    // All sub-components are defined below it.
-    const [workflowStep, setWorkflowStep] = useState('upload');
-    const [dataSet, setDataSet] = useState([]);
-    const [analysisResults, setAnalysisResults] = useState(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState(null);
-
-    const handleNextStep = () => setWorkflowStep('configure');
-    
-    const handleAnalysis = async (researchQuestion) => {
-        setIsLoading(true);
-        setError(null);
-        // ... analysis logic
-        setWorkflowStep('report');
-        setIsLoading(false);
-    };
-
-    const handleBackToUpload = () => { setWorkflowStep('upload'); setAnalysisResults(null); };
-    const handleBackToConfig = () => { setWorkflowStep('configure'); setAnalysisResults(null); };
-    const handleDownloadReport = () => {};
-
-    const renderPage = () => {
-        if (isLoading) {
-            return <div className="w-full p-6 flex flex-col items-center justify-center bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg mt-8 shadow-2xl"><div className="animate-pulse rounded-full h-16 w-16 bg-teal-500/50"></div><p className="mt-4 text-gray-300">Synthesizing insights...</p></div>
-        }
-        switch (workflowStep) {
-            case 'configure':
-                return <ConfigurationPage dataSet={dataSet} setDataSet={setDataSet} onAnalyze={handleAnalysis} onBack={handleBackToUpload} error={error} />;
-            case 'report':
-                return <AnalysisReportPage dataSet={dataSet} results={analysisResults} onBack={handleBackToConfig} onDownload={handleDownloadReport} />;
-            case 'upload':
-            default:
-                return <FileUploadPage dataSet={dataSet} setDataSet={setDataSet} onNext={handleNextStep} />;
-        }
-    };
-    
-    return renderPage();
-};
-
 // --- Sub-components for the AnalysisToolPage ---
 
 const FileUploadPage = ({ dataSet, setDataSet, onNext }) => {
@@ -185,6 +146,47 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
     return <div className="text-white">Analysis Report Page</div>; // Placeholder
 };
 
+// --- Page 3: The Main Application ---
+const AnalysisToolPage = () => {
+    const [workflowStep, setWorkflowStep] = useState('upload'); // upload, configure, report
+    const [dataSet, setDataSet] = useState([]);
+    const [analysisResults, setAnalysisResults] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    const handleNextStep = () => setWorkflowStep('configure');
+    
+    const handleAnalysis = async (researchQuestion) => {
+        setIsLoading(true);
+        setError(null);
+        // ... analysis logic from previous versions
+        const results = { researchQuestion, soWhatActions: ["Example action 1", "Example action 2"], themes: [], verbatimQuotes: [], quantitativeResults: [], sentiment: 'Neutral', sentimentDistribution: {positive: 0, negative: 0, neutral: 100} };
+        setAnalysisResults(results);
+        setWorkflowStep('report');
+        setIsLoading(false);
+    };
+
+    const handleBackToUpload = () => { setWorkflowStep('upload'); setAnalysisResults(null); };
+    const handleBackToConfig = () => { setWorkflowStep('configure'); setAnalysisResults(null); };
+    const handleDownloadReport = (results) => { /* Download logic */ };
+
+    const renderPage = () => {
+        if (isLoading) {
+            return <div className="w-full p-6 flex flex-col items-center justify-center bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg mt-8 shadow-2xl"><div className="animate-pulse rounded-full h-16 w-16 bg-teal-500/50"></div><p className="mt-4 text-gray-300">Synthesizing insights...</p></div>
+        }
+        switch (workflowStep) {
+            case 'configure':
+                return <ConfigurationPage dataSet={dataSet} setDataSet={setDataSet} onAnalyze={handleAnalysis} onBack={handleBackToUpload} error={error} />;
+            case 'report':
+                return <AnalysisReportPage dataSet={dataSet} results={analysisResults} onBack={handleBackToConfig} onDownload={handleDownloadReport} />;
+            case 'upload':
+            default:
+                return <FileUploadPage dataSet={dataSet} setDataSet={setDataSet} onNext={handleNextStep} />;
+        }
+    };
+    
+    return renderPage();
+};
 
 // --- Main App Component (acts as a router) ---
 
@@ -217,23 +219,22 @@ export default function App() {
     const handleNavigate = (destination) => {
         if (destination === 'app' && !user) {
             setPage('login');
-        } else {
-            setPage('app'); // Go directly to the app if logged in
+        } else if (user) {
+            setPage('app');
+        }
+        else {
+            setPage(destination);
         }
     };
 
     const renderContent = () => {
-        if (user) {
+        if (page === 'app' && user) {
             return <AnalysisToolPage />;
         }
-        
-        switch (page) {
-            case 'login':
-                return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
-            case 'home':
-            default:
-                return <HomePage onNavigate={handleNavigate} />;
+        if (page === 'login') {
+            return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
         }
+        return <HomePage onNavigate={handleNavigate} />;
     };
 
     return (
