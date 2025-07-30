@@ -159,7 +159,7 @@ const DashboardPage = ({ user, onNavigate }) => {
 
 const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) => {
     const fileInputRef = useRef(null);
-    
+
     const handleFileChange = (event) => {
         const files = event.target.files;
         if (!files || files.length === 0) return;
@@ -196,7 +196,7 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) =>
 
         event.target.value = null;
     };
-
+    
     return (<div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-6"><button onClick={onDashboardNavigate} className="text-sm font-medium text-[#13BBAF] hover:text-teal-400">&larr; Back to Dashboard</button><div className="flex justify-between items-center"><div><h2 className="text-2xl font-semibold text-white">Step 1: Build Your Data Set</h2><p className="text-sm text-gray-400">Add all your project files (.txt, .docx, .csv, .xlsx).</p></div>{dataSet.length > 0 && (<button onClick={() => setDataSet([])} className="inline-flex items-center px-3 py-2 border border-red-500/50 shadow-sm text-sm font-medium rounded-md text-red-400 bg-gray-800 hover:bg-gray-700">Clear Data Set</button>)}</div><div className="bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg p-8 text-center"><input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".txt,.csv,.xlsx,.doc,.docx" className="hidden" multiple /><button onClick={() => fileInputRef.current.click()} className="inline-flex items-center px-4 py-2 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>Add File(s)</button></div><div><h3 className="font-semibold text-lg text-white">Files in Your Data Set:</h3><div className="mt-2 space-y-2">{dataSet.map(file => <p key={file.id} className="p-2 bg-gray-800/70 text-gray-300 rounded-md truncate">{file.name}</p>)}{dataSet.length === 0 && <p className="text-gray-500">No files uploaded.</p>}</div></div><div className="pt-5"><div className="flex justify-end"><button onClick={onNext} disabled={dataSet.length === 0} className="w-full md:w-auto inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-gradient-to-r from-[#13BBAF] to-teal-500 hover:from-teal-500 hover:to-teal-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105">Next: Configure Data</button></div></div></div>);
 };
 
@@ -265,10 +265,86 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
 };
 
 const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
-    return <div className="text-white">Analysis Report Page</div>; // Placeholder
+    const { narrativeOverview, themes, sentiment, sentimentDistribution, verbatimQuotes, quantitativeResults, researchQuestion, soWhatActions = [] } = results;
+    const DataSetOverview = ({ dataSet }) => { const textFilesCount = dataSet.filter(f => f.type === 'text').length; const spreadsheets = dataSet.filter(f => f.type === 'spreadsheet'); const spreadsheetRowsCount = spreadsheets.reduce((acc, file) => acc + (file.rows?.length || 0), 0); return (<div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm mb-6"><h3 className="text-lg font-semibold text-white mb-3">Data Set Overview</h3><div className="flex space-x-8">{textFilesCount > 0 && (<div className="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg><div><p className="text-2xl font-bold text-white">{textFilesCount}</p><p className="text-sm text-gray-400">Text Documents</p></div></div>)}{spreadsheets.length > 0 && (<div className="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg><div><p className="text-2xl font-bold text-white">{spreadsheetRowsCount}</p><p className="text-sm text-gray-400">Survey Responses</p></div></div>)}</div></div>); };
+    const ResearchQuestionDisplay = ({ question }) => (<div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm mb-6"><h3 className="text-lg font-semibold text-white">Research Question</h3><p className="mt-2 text-gray-300 italic">"{question}"</p></div>);
+    const SentimentDonutChart = ({ distribution }) => { const { positive, negative, neutral } = distribution; const conicGradient = `conic-gradient(#ef4444 0% ${negative}%, #84cc16 ${negative}% ${negative + positive}%, #95A3A6 ${negative + positive}% 100%)`; return (<div className="flex flex-col items-center"><div style={{ background: conicGradient }} className="w-32 h-32 rounded-full flex items-center justify-center"><div className="w-20 h-20 bg-gray-800 rounded-full"></div></div><div className="flex justify-center space-x-4 mt-4 text-sm"><div className="flex items-center"><span className="w-3 h-3 rounded-full bg-red-500 mr-2"></span>Negative ({negative}%)</div><div className="flex items-center"><span className="w-3 h-3 rounded-full bg-lime-500 mr-2"></span>Positive ({positive}%)</div><div className="flex items-center"><span className="w-3 h-3 rounded-full bg-[#95A3A6] mr-2"></span>Neutral ({neutral}%)</div></div></div>); };
+    const SentimentSection = ({ sentiment, distribution }) => { const sentimentStyles = { Positive: { bgColor: 'bg-green-900/50', textColor: 'text-green-300', borderColor: 'border-green-500/30', emoji: '😊', label: 'Positive' }, Negative: { bgColor: 'bg-red-900/50', textColor: 'text-red-300', borderColor: 'border-red-500/30', emoji: '😞', label: 'Negative' }, Neutral: { bgColor: 'bg-gray-700', textColor: 'text-gray-300', borderColor: 'border-gray-600', emoji: '😐', label: 'Neutral' } }; const styles = sentimentStyles[sentiment] || sentimentStyles['Neutral']; return (<div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm"><h3 className="text-lg font-semibold text-white mb-4 text-center">Overall Sentiment</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center"><div className={`p-4 rounded-lg border ${styles.borderColor} ${styles.bgColor}`}><div className="flex items-center justify-center"><span className="text-5xl mr-4">{styles.emoji}</span><span className={`text-3xl font-bold ${styles.textColor}`}>{styles.label}</span></div></div><SentimentDonutChart distribution={distribution} /></div></div>); };
+    const NarrativeOverviewDisplay = ({ narrative }) => (<div className="p-5 rounded-lg border border-purple-500/20 bg-purple-900/20 backdrop-blur-sm"><h3 className="text-xl font-semibold text-white mb-2">Overview</h3><p className="text-gray-300 leading-relaxed text-base">{narrative}</p></div>);
+    const SoWhatDisplay = ({ actions }) => ( actions && actions.length > 0 && <div className="p-5 rounded-lg border border-teal-500/20 bg-teal-900/20 backdrop-blur-sm"><h3 className="text-xl font-semibold text-white mb-3">So What? (Actions & Recommendations)</h3><ul className="list-disc list-inside space-y-2 text-gray-300">{actions.map((action, index) => (<li key={index}>{action}</li>))}</ul></div>);
+    const ThematicAnalysisDisplay = ({ themes }) => ( themes && themes.length > 0 && <div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm"><h3 className="text-lg font-semibold text-white mb-3">Thematic Analysis</h3><div className="space-y-4 mb-6"><h4 className="font-semibold text-gray-300">Theme Prominence</h4>{themes.map(theme => (<div key={theme.theme} className="w-full"><div className="flex items-center mb-1"><span className="text-lg mr-2">{theme.emoji}</span><span className="text-sm font-medium text-gray-300">{theme.theme}</span></div><div className="w-full bg-gray-700 rounded-full h-4"><div className="bg-green-500 h-4 rounded-full" style={{ width: `${theme.prominence * 10}%` }}></div></div></div>))}</div><hr className="my-6 border-gray-700"/><ul className="space-y-6">{themes.map((item, index) => (<li key={index} className="flex flex-col p-4 bg-gray-900/70 rounded-md shadow-sm"><div className="flex items-center mb-3"><span className="text-2xl mr-4">{item.emoji}</span><span className="text-white font-bold text-lg">{item.theme}</span></div><div className="space-y-3">{item.evidence.map((quote, qIndex) => (<blockquote key={qIndex} className="border-l-4 border-[#13BBAF] pl-4"><p className="text-gray-400 italic">"{quote}"</p></blockquote>))}</div></li>))}</ul></div>);
+    const VerbatimQuotesDisplay = ({ quotes }) => ( quotes && quotes.length > 0 && <div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm"><h3 className="text-lg font-semibold text-white mb-3">Key Verbatim Quotes</h3><ul className="space-y-4">{quotes.map((quote, index) => (<li key={index}><blockquote className="relative p-4 text-xl italic border-l-4 bg-gray-900/70 text-gray-300 border-gray-600 quote"><div className="stylistic-quote-mark" aria-hidden="true">&ldquo;</div><p className="mb-4">{quote}</p></blockquote></li>))}</ul></div>);
+    const QuantitativeAnalysisDisplay = ({ quantData }) => { const [isOpen, setIsOpen] = useState(true); if (!quantData || quantData.length === 0) return null; return (<div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm"><button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center"><h3 className="text-lg font-semibold text-white">Quantitative Analysis</h3><svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg></button>{isOpen && <div className="mt-4 space-y-8">{quantData.map(fileResult => (<div key={fileResult.sourceFile}><h4 className="font-semibold text-gray-200 text-md border-b border-gray-700 pb-2 mb-4">From: {fileResult.sourceFile}</h4><div className="space-y-6">{fileResult.stats.map(stat => (<div key={stat.title}><h5 className="font-semibold text-gray-300">{stat.title}</h5><div className="grid grid-cols-3 gap-4 mt-2 text-center">{stat.error ? (<p className="col-span-3 text-sm text-red-400 bg-red-900/50 p-2 rounded-md">{stat.error}</p>) : (<><div className="bg-gray-700 p-2 rounded-md"><p className="text-sm text-gray-400">Mean</p><p className="text-xl font-bold">{stat.mean ?? '-'}</p></div><div className="bg-gray-700 p-2 rounded-md"><p className="text-sm text-gray-400">Median</p><p className="text-xl font-bold">{stat.median ?? '-'}</p></div><div className="bg-gray-700 p-2 rounded-md"><p className="text-sm text-gray-400">Mode</p><p className="text-xl font-bold">{stat.mode ?? '-'}</p></div></>)}</div></div>))}{fileResult.categories.map(cat => (<CategoryChart key={cat.title} category={cat} />))}</div></div>))}</div>}</div>); };
+    return (<div className="w-full bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6"><div className="flex justify-between items-center mb-6"><button onClick={onBack} className="inline-flex items-center px-4 py-2 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>Back to Data Set</button><h2 className="text-2xl font-semibold text-white">Analysis Report</h2><button onClick={() => onDownload(results)} className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>Download Report</button></div><div className="space-y-6"><DataSetOverview dataSet={dataSet} /><ResearchQuestionDisplay question={researchQuestion} /><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><NarrativeOverviewDisplay narrative={narrativeOverview} /><SoWhatDisplay actions={soWhatActions} /></div><SentimentSection sentiment={sentiment} distribution={sentimentDistribution} /><ThematicAnalysisDisplay themes={themes} /><VerbatimQuotesDisplay quotes={verbatimQuotes} /><QuantitativeAnalysisDisplay quantData={quantitativeResults} /></div></div>);
 };
 
-// --- Page 3: The Main Application ---
+// --- New Category Chart Component ---
+const CategoryChart = ({ category }) => {
+    const [chartType, setChartType] = useState('donut'); // donut, bar, table
+    const total = category.data.reduce((sum, item) => sum + item.count, 0);
+    const colors = ['#13BBAF', '#EDC8FF', '#84cc16', '#f97316', '#3b82f6'];
+
+    const renderChart = () => {
+        switch (chartType) {
+            case 'bar':
+                const maxCount = Math.max(...category.data.map(i => i.count));
+                return (
+                    <div className="mt-2 space-y-2">
+                        {category.data.map((item, index) => (
+                            <div key={item.name} className="flex items-center"><span className="w-24 text-sm text-gray-400 truncate">{item.name}</span><div className="flex-1 bg-gray-700 rounded-full h-5"><div className="h-5 rounded-full" style={{ width: `${(item.count / maxCount) * 100}%`, backgroundColor: colors[index % colors.length] }}></div></div><span className="ml-2 text-sm font-semibold">{item.count}</span></div>
+                        ))}
+                    </div>
+                );
+            case 'table':
+                return (
+                    <table className="w-full mt-2 text-sm text-left">
+                        <thead className="text-xs text-gray-400 uppercase bg-gray-700/50"><tr><th className="px-4 py-2">Category</th><th className="px-4 py-2">Count</th><th className="px-4 py-2">Percentage</th></tr></thead>
+                        <tbody>{category.data.map((item, index) => (<tr key={item.name} className="border-b border-gray-700"><td className="px-4 py-2">{item.name}</td><td className="px-4 py-2">{item.count}</td><td className="px-4 py-2">{((item.count / total) * 100).toFixed(1)}%</td></tr>))}</tbody>
+                    </table>
+                );
+            case 'donut':
+            default:
+                let accumulated = 0;
+                const conicGradient = category.data.map((item, index) => {
+                    const percentage = (item.count / total) * 100;
+                    const color = colors[index % colors.length];
+                    const start = accumulated;
+                    accumulated += percentage;
+                    const end = accumulated;
+                    return `${color} ${start}% ${end}%`;
+                }).join(', ');
+                return (
+                    <div className="flex flex-col items-center">
+                        <div style={{ background: `conic-gradient(${conicGradient})` }} className="w-32 h-32 rounded-full flex items-center justify-center">
+                            <div className="w-20 h-20 bg-gray-800 rounded-full"></div>
+                        </div>
+                        <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-4 text-sm">
+                            {category.data.map((item, index) => (
+                                <div key={item.name} className="flex items-center"><span className="w-3 h-3 rounded-full mr-2" style={{backgroundColor: colors[index % colors.length]}}></span>{item.name} ({item.count})</div>
+                            ))}
+                        </div>
+                    </div>
+                );
+        }
+    };
+
+    return (
+        <div>
+            <div className="flex justify-between items-center">
+                <h5 className="font-semibold text-gray-300">{category.title}</h5>
+                <div className="flex space-x-1 bg-gray-700 p-1 rounded-md">
+                    <button onClick={() => setChartType('donut')} className={`px-2 py-1 text-xs rounded ${chartType === 'donut' ? 'bg-teal-500 text-white' : 'text-gray-400'}`}>Donut</button>
+                    <button onClick={() => setChartType('bar')} className={`px-2 py-1 text-xs rounded ${chartType === 'bar' ? 'bg-teal-500 text-white' : 'text-gray-400'}`}>Bar</button>
+                    <button onClick={() => setChartType('table')} className={`px-2 py-1 text-xs rounded ${chartType === 'table' ? 'bg-teal-500 text-white' : 'text-gray-400'}`}>Table</button>
+                </div>
+            </div>
+            {renderChart()}
+        </div>
+    );
+};
+
+
+// --- Page 4: The Main Application ---
 const AnalysisToolPage = ({ onNavigate }) => {
     const [workflowStep, setWorkflowStep] = useState('upload');
     const [dataSet, setDataSet] = useState([]);
