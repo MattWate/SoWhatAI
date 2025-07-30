@@ -154,7 +154,6 @@ const DashboardPage = ({ user, onNavigate }) => {
     );
 };
 
-
 // --- Sub-components for the AnalysisToolPage ---
 
 const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) => {
