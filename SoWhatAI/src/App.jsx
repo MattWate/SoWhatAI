@@ -140,7 +140,7 @@ const DashboardPage = ({ user, onNavigate }) => {
                 <h3 className="text-2xl font-semibold text-white mb-4">Your Projects</h3>
                 {projects.length === 0 ? (
                     <div className="text-center py-12 bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-500" fill="none" viewBox="0-0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
                         <h4 className="mt-4 text-lg font-semibold text-white">No projects yet</h4>
                         <p className="mt-1 text-sm text-gray-400">Click "Create New Project" to get started.</p>
                     </div>
@@ -196,7 +196,7 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) =>
         event.target.value = null;
     };
     
-    return (<div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-6"><button onClick={onDashboardNavigate} className="text-sm font-medium text-[#13BBAF] hover:text-teal-400">&larr; Back to Dashboard</button><div className="flex justify-between items-center"><div><h2 className="text-2xl font-semibold text-white">Step 1: Build Your Data Set</h2><p className="text-sm text-gray-400">Add all your project files (.txt, .docx, .csv, .xlsx).</p></div>{dataSet.length > 0 && (<button onClick={() => setDataSet([])} className="inline-flex items-center px-3 py-2 border border-red-500/50 shadow-sm text-sm font-medium rounded-md text-red-400 bg-gray-800 hover:bg-gray-700">Clear Data Set</button>)}</div><div className="bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg p-8 text-center"><input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".txt,.csv,.xlsx,.doc,.docx" className="hidden" multiple /><button onClick={() => fileInputRef.current.click()} className="inline-flex items-center px-4 py-2 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>Add File(s)</button></div><div><h3 className="font-semibold text-lg text-white">Files in Your Data Set:</h3><div className="mt-2 space-y-2">{dataSet.map(file => <p key={file.id} className="p-2 bg-gray-800/70 text-gray-300 rounded-md truncate">{file.name}</p>)}{dataSet.length === 0 && <p className="text-gray-500">No files uploaded.</p>}</div></div><div className="pt-5"><div className="flex justify-end"><button onClick={onNext} disabled={dataSet.length === 0} className="w-full md:w-auto inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-gradient-to-r from-[#13BBAF] to-teal-500 hover:from-teal-500 hover:to-teal-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105">Next: Configure Data</button></div></div></div>);
+    return (<div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-6"><button onClick={onDashboardNavigate} className="text-sm font-medium text-[#13BBAF] hover:text-teal-400">&larr; Back to Dashboard</button><div className="flex justify-between items-center"><div><h2 className="text-2xl font-semibold text-white">Step 1: Build Your Data Set</h2><p className="text-sm text-gray-400">Add all your project files (.txt, .docx, .csv, .xlsx).</p></div>{dataSet.length > 0 && (<button onClick={() => setDataSet([])} className="inline-flex items-center px-3 py-2 border border-red-500/50 shadow-sm text-sm font-medium rounded-md text-red-400 bg-gray-800 hover:bg-gray-700">Clear Data Set</button>)}</div><div className="bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg p-8 text-center"><input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".txt,.csv,.xlsx,.doc,.docx" className="hidden" multiple /><button onClick={() => fileInputRef.current.click()} className="inline-flex items-center px-4 py-2 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0-0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>Add File(s)</button></div><div><h3 className="font-semibold text-lg text-white">Files in Your Data Set:</h3><div className="mt-2 space-y-2">{dataSet.map(file => <p key={file.id} className="p-2 bg-gray-800/70 text-gray-300 rounded-md truncate">{file.name}</p>)}{dataSet.length === 0 && <p className="text-gray-500">No files uploaded.</p>}</div></div><div className="pt-5"><div className="flex justify-end"><button onClick={onNext} disabled={dataSet.length === 0} className="w-full md:w-auto inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-gradient-to-r from-[#13BBAF] to-teal-500 hover:from-teal-500 hover:to-teal-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105">Next: Configure Data</button></div></div></div>);
 };
 
 const MappingModal = ({ file, onClose, onSave }) => {
@@ -264,15 +264,23 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
     const modalFile = dataSet.find(f => f.id === modalFileId);
 
     useEffect(() => {
+        const needsCSVParsing = dataSet.some(f => f.name.endsWith('.csv'));
+        const needsExcelParsing = dataSet.some(f => f.name.endsWith('.xlsx'));
+        const needsDocxParsing = dataSet.some(f => f.name.endsWith('.docx'));
+
         const checkLibraries = () => {
-            if (window.Papa && window.XLSX && window.mammoth) {
+            const papaReady = !needsCSVParsing || window.Papa;
+            const xlsxReady = !needsExcelParsing || window.XLSX;
+            const mammothReady = !needsDocxParsing || window.mammoth;
+
+            if (papaReady && xlsxReady && mammothReady) {
                 setIsDataReady(true);
             } else {
                 setTimeout(checkLibraries, 100);
             }
         };
         checkLibraries();
-    }, []);
+    }, [dataSet]);
 
     return (<div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-6"><button onClick={onBack} className="text-sm font-medium text-[#13BBAF] hover:text-teal-400">&larr; Back to upload</button><div><h2 className="text-2xl font-semibold text-white">Step 2: Configure Your Data Set</h2><p className="text-sm text-gray-400">Map columns for each spreadsheet and provide your research question.</p></div><div><label htmlFor="research-question" className="block text-lg font-semibold text-white">Research Question</label><div className="mt-1"><textarea id="research-question" rows={3} className="shadow-sm focus:ring-[#13BBAF] focus:border-[#13BBAF] block w-full sm:text-sm border-gray-600 bg-gray-800 text-white rounded-md p-2" placeholder="e.g., How do our power-users feel about the new interface performance?" value={researchQuestion} onChange={(e) => setResearchQuestion(e.target.value)} /></div></div>
     
