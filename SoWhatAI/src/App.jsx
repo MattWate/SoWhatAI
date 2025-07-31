@@ -200,20 +200,65 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) =>
 };
 
 const MappingModal = ({ file, onClose, onSave }) => {
+    const [parsedData, setParsedData] = useState({ headers: [], rows: [] });
     const [columnMappings, setColumnMappings] = useState(file.mappings || {});
+    const [isLoading, setIsLoading] = useState(true);
+
+    const detectColumnType = (header, rows) => {
+        const values = rows.map(r => r[header]).filter(Boolean).slice(0, 10);
+        if (values.length === 0) return 'ignore';
+        const allAreNumbers = values.every(v => !isNaN(Number(v)));
+        if (allAreNumbers) return 'stats';
+        const uniqueValues = new Set(values);
+        if (uniqueValues.size <= 5 || uniqueValues.size / values.length < 0.5) return 'category';
+        const averageLength = values.reduce((acc, v) => acc + String(v).length, 0) / values.length;
+        if (averageLength > 30) return 'text';
+        return 'ignore';
+    };
     
+    useEffect(() => {
+        const processData = (data) => {
+            const headers = Object.keys(data[0] || {});
+            setParsedData({ headers, rows: data });
+            
+            const initialMappings = { ...file.mappings };
+            if (Object.keys(initialMappings).length === 0) {
+                headers.forEach(header => {
+                    initialMappings[header] = detectColumnType(header, data);
+                });
+            }
+            setColumnMappings(initialMappings);
+            setIsLoading(false);
+        };
+
+        if (file.fileObject.name.endsWith('.csv')) {
+            window.Papa.parse(file.fileObject, { header: true, skipEmptyLines: true, complete: (results) => processData(results.data) });
+        } else {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = window.XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const json = window.XLSX.utils.sheet_to_json(worksheet);
+                processData(json);
+            };
+            reader.readAsArrayBuffer(file.fileObject);
+        }
+    }, [file]);
+
     const handleSave = () => {
-        onSave(file.id, columnMappings);
+        onSave(file.id, columnMappings, parsedData);
         onClose();
     };
 
-    return (<div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4"><div className="bg-gray-800 text-white rounded-lg shadow-xl p-6 space-y-4 w-full max-w-lg"><h3 className="text-lg font-semibold">Map Columns for: {file.name}</h3><div className="space-y-2 max-h-96 overflow-y-auto p-1">{file.headers.map(header => (<div key={header} className="grid grid-cols-2 gap-4 items-center"><label className="font-medium truncate">{header}</label><select value={columnMappings[header]} onChange={(e) => setColumnMappings(prev => ({...prev, [header]: e.target.value}))} className="rounded-md border-gray-600 bg-gray-700 text-white"><option value="ignore">Ignore</option><option value="text">Analyse for Themes</option><option value="stats">Calculate Statistics</option><option value="category">Categorise</option></select></div>))}</div><div className="flex justify-end space-x-3 pt-4"><button onClick={onClose} className="px-4 py-2 bg-gray-600 rounded-md">Cancel</button><button onClick={handleSave} className="px-4 py-2 bg-[#13BBAF] text-white rounded-md">Save Mappings</button></div></div></div>);
+    return (<div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4"><div className="bg-gray-800 text-white rounded-lg shadow-xl p-6 space-y-4 w-full max-w-lg"><h3 className="text-lg font-semibold">Map Columns for: {file.name}</h3>{isLoading ? <p>Loading spreadsheet...</p> : (<div className="space-y-2 max-h-96 overflow-y-auto p-1">{parsedData.headers.map(header => (<div key={header} className="grid grid-cols-2 gap-4 items-center"><label className="font-medium truncate">{header}</label><select value={columnMappings[header]} onChange={(e) => setColumnMappings(prev => ({...prev, [header]: e.target.value}))} className="rounded-md border-gray-600 bg-gray-700 text-white"><option value="ignore">Ignore</option><option value="text">Analyse for Themes</option><option value="stats">Calculate Statistics</option><option value="category">Categorise</option></select></div>))}</div>)}<div className="flex justify-end space-x-3 pt-4"><button onClick={onClose} className="px-4 py-2 bg-gray-600 rounded-md">Cancel</button><button onClick={handleSave} className="px-4 py-2 bg-[#13BBAF] text-white rounded-md">Save Mappings</button></div></div></div>);
 };
 
 const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) => {
     const [modalFileId, setModalFileId] = useState(null);
     const [researchQuestion, setResearchQuestion] = useState('');
-    const handleMappingsUpdate = (fileId, newMappings) => { setDataSet(prevDataSet => prevDataSet.map(file => file.id === fileId ? { ...file, mappings: newMappings } : file)); };
+    const handleMappingsUpdate = (fileId, newMappings, parsedData) => { setDataSet(prevDataSet => prevDataSet.map(file => file.id === fileId ? { ...file, mappings: newMappings, ...parsedData } : file)); };
     const modalFile = dataSet.find(f => f.id === modalFileId);
 
     useEffect(() => {
