@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { supabase } from './supabaseClient.js'; // <-- CORRECTED IMPORT PATH
+import { supabase } from './supabaseClient.js';
 
 // --- UI Components ---
 
@@ -265,8 +265,8 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
 
     useEffect(() => {
         const needsCSVParsing = dataSet.some(f => f.name.toLowerCase().endsWith('.csv'));
-        const needsExcelParsing = dataSet.some(f => f.name.toLowerCase().endsWith('.xlsx'));
-        const needsDocxParsing = dataSet.some(f => f.name.toLowerCase().endsWith('.doc') || f.name.toLowerCase().endsWith('.docx'));
+        const needsExcelParsing = dataSet.some(f => /\.(xls|xlsx)$/i.test(f.name));
+        const needsDocxParsing = dataSet.some(f => /\.docx?$/i.test(f.name));
 
         let timerId;
         const checkLibraries = () => {
