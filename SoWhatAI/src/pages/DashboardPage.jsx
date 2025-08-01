@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient'; // Make sure this path is correct
+import { supabase } from '../supabaseClient'; // Make sure this path is correct
 
 const DashboardPage = ({ user, onNavigate }) => {
     const [projects, setProjects] = useState([]);
@@ -76,3 +76,4 @@ const DashboardPage = ({ user, onNavigate }) => {
 };
 
 export default DashboardPage;
+
