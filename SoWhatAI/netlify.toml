@@ -3,7 +3,7 @@
 
 [build]
   # This is the command to build your React/Vite site.
-  command = "npm run build"
+  command = "npm install && npm run build"
   
   # This tells Netlify where to find your serverless functions.
   functions = "netlify/functions"
@@ -15,3 +15,4 @@
 [dev]
   # This tells the local dev server (netlify dev) where to find your functions.
   functions = "netlify/functions"
+
