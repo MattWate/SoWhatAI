@@ -4,11 +4,11 @@ import { supabase } from './supabaseClient.js';
 // --- Page & Component Imports ---
 // Make sure your file structure matches these paths.
 // You might have these in a /pages or /components subdirectory.
-import HomePage from './HomePage';
-import LoginPage from './LoginPage';
-import DashboardPage from './DashboardPage';
-import AnalysisToolPage from './AnalysisToolPage';
-import ReportViewerPage from './ReportViewerPage'; // You will create this file
+import HomePage from './pages/HomePage';
+import LoginPage from './pages/LoginPage';
+import DashboardPage from './pages/DashboardPage';
+import AnalysisToolPage from './pages/AnalysisToolPage';
+import ReportViewerPage from './pages/ReportViewerPage';
 
 // --- UI Components ---
 // You can keep these here or move them to their own files (e.g., /components/Header.jsx)
@@ -135,3 +135,4 @@ export default function App() {
         </div>
     );
 }
+
