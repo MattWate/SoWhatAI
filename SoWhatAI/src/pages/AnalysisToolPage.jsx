@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 
 // --- Sub-components for the AnalysisToolPage ---
 // These are now defined as standalone components within this file.
@@ -231,3 +232,4 @@ const AnalysisToolPage = ({ user, onNavigate }) => { // Pass user prop
 };
 
 export default AnalysisToolPage;
+
