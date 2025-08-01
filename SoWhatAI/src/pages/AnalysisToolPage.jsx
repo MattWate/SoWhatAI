@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { supabase } from '../supabaseClient'; // This line fixes the 'supabase is not defined' error
+import { supabase } from '../supabaseClient';
 
 // --- Sub-components for the AnalysisToolPage ---
 
@@ -116,7 +116,6 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
                 <p className="text-sm text-gray-400">Map columns for each spreadsheet and provide your research question.</p>
             </div>
 
-            {/* This section has been moved to the top for better UX */}
             <div>
                 <label htmlFor="research-question" className="block text-lg font-semibold text-white">Research Question</label>
                 <div className="mt-1">
@@ -174,7 +173,7 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
     );
 };
 
-export const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
+export const AnalysisReportPage = ({ dataSet, onBack, results, onDownload, isDownloading }) => {
     if (!results) {
         return <div className="text-center p-10"><p>No analysis results available.</p></div>;
     }
@@ -198,9 +197,40 @@ export const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => 
         return (<div>{/* ... same CategoryChart JSX as before ... */}</div>);
     };
 
-    return (<div className="w-full bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6"><div className="flex justify-between items-center mb-6"><button onClick={onBack} className="inline-flex items-center px-4 py-2 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>Back</button><h2 className="text-2xl font-semibold text-white">Analysis Report</h2><button onClick={() => onDownload(results)} className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700">Download</button></div><div className="space-y-6"><DataSetOverview dataSet={dataSet} /><ResearchQuestionDisplay question={researchQuestion} /><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><NarrativeOverviewDisplay narrative={narrativeOverview} /><SoWhatDisplay actions={soWhatActions} /></div><SentimentSection sentiment={sentiment} distribution={sentimentDistribution} /><ThematicAnalysisDisplay themes={themes} /><VerbatimQuotesDisplay quotes={verbatimQuotes} /><QuantitativeAnalysisDisplay quantData={quantitativeResults} /></div></div>);
-};
+    return (
+        <div className="w-full bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6">
+            <div className="flex justify-between items-center mb-6">
+                <button onClick={onBack} className="inline-flex items-center px-4 py-2 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                    Back
+                </button>
+                <h2 className="text-2xl font-semibold text-white">Analysis Report</h2>
 
+                {/* --- THIS IS THE UPDATED BUTTON --- */}
+                <button 
+                    onClick={onDownload} 
+                    disabled={isDownloading}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-500"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    {isDownloading ? 'Downloading...' : 'Download Report'}
+                </button>
+            </div>
+            <div className="space-y-6">
+                <DataSetOverview dataSet={dataSet} />
+                <ResearchQuestionDisplay question={researchQuestion} />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <NarrativeOverviewDisplay narrative={narrativeOverview} />
+                    <SoWhatDisplay actions={soWhatActions} />
+                </div>
+                <SentimentSection sentiment={sentiment} distribution={sentimentDistribution} />
+                <ThematicAnalysisDisplay themes={themes} />
+                <VerbatimQuotesDisplay quotes={verbatimQuotes} />
+                <QuantitativeAnalysisDisplay quantData={quantitativeResults} />
+            </div>
+        </div>
+    );
+};
 
 // --- Main Page Component ---
 const AnalysisToolPage = ({ user, onNavigate }) => {
@@ -247,10 +277,8 @@ const AnalysisToolPage = ({ user, onNavigate }) => {
             }
 
             const results = await response.json();
-            // Attach the raw dataSet to the results so it can be saved
             results.dataSet = dataSet;
             
-            // Save the report to Supabase
             const { error: insertError } = await supabase.from('projects').insert([{ 
                 project_name: researchQuestion.substring(0, 50) + '...',
                 research_question: researchQuestion,
@@ -274,7 +302,7 @@ const AnalysisToolPage = ({ user, onNavigate }) => {
 
     const handleBackToUpload = () => { setWorkflowStep('upload'); setAnalysisResults(null); setDataSet([]) };
     const handleBackToConfig = () => { setWorkflowStep('configure'); setAnalysisResults(null); };
-    const handleDownloadReport = (results) => { /* Download logic */ };
+    const handleDownloadReport = (results) => { /* Download logic will be handled by ReportViewerPage */ };
 
     const renderPage = () => {
         if (isLoading) {
@@ -284,7 +312,7 @@ const AnalysisToolPage = ({ user, onNavigate }) => {
             case 'configure':
                 return <ConfigurationPage dataSet={dataSet} setDataSet={setDataSet} onAnalyze={handleAnalysis} onBack={handleBackToUpload} error={error} />;
             case 'report':
-                return <AnalysisReportPage dataSet={dataSet} results={analysisResults} onBack={handleBackToConfig} onDownload={handleDownloadReport} />;
+                return <AnalysisReportPage dataSet={dataSet} results={analysisResults} onBack={() => onNavigate('dashboard')} onDownload={handleDownloadReport} />;
             case 'upload':
             default:
                 return <FileUploadPage dataSet={dataSet} setDataSet={setDataSet} onNext={handleNextStep} onDashboardNavigate={() => onNavigate('dashboard')} />;
