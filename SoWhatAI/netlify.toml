@@ -10,9 +10,10 @@
   
   # This is the corrected line. It tells Netlify that the final website
   # is in a folder named "dist".
-  publish = "dist"
+  publish = "SoWhatAI/dist"
 
 [dev]
   # This tells the local dev server (netlify dev) where to find your functions.
   functions = "netlify/functions"
+
 
