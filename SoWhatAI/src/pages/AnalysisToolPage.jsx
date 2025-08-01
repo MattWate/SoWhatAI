@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../supabaseClient'; // This line fixes the 'supabase is not defined' error
 
 // --- Sub-components for the AnalysisToolPage ---
-// These are now defined as standalone components within this file.
 
 const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) => {
     const fileInputRef = useRef(null);
@@ -107,7 +106,72 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
     const [researchQuestion, setResearchQuestion] = useState('');
     const handleMappingsUpdate = (fileId, newMappings, parsedData) => { setDataSet(prevDataSet => prevDataSet.map(file => file.id === fileId ? { ...file, mappings: newMappings, ...parsedData } : file)); };
     const modalFile = dataSet.find(f => f.id === modalFileId);
-    return (<div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-6"><button onClick={onBack} className="text-sm font-medium text-[#13BBAF] hover:text-teal-400">&larr; Back to upload</button><div><h2 className="text-2xl font-semibold text-white">Step 2: Configure Your Data Set</h2><p className="text-sm text-gray-400">Map columns for each spreadsheet and provide your research question.</p></div><div className="space-y-3"><h3 className="font-semibold text-lg text-white">Files:</h3>{dataSet.map(file => (<div key={file.id} className="flex items-center justify-between p-3 bg-gray-800/70 rounded-md"><span className="font-medium text-gray-300 truncate">{file.name}</span>{file.type === 'spreadsheet' && (<button onClick={() => setModalFileId(file.id)} className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#13BBAF] hover:bg-teal-600 transition-colors">Map Columns</button>)}{file.type === 'text' && (<span className="text-sm text-green-400">Ready to Analyse</span>)}</div>))}</div><div><label htmlFor="research-question" className="block text-lg font-semibold text-white">Research Question</label><div className="mt-1"><textarea id="research-question" rows={3} className="shadow-sm focus:ring-[#13BBAF] focus:border-[#13BBAF] block w-full sm:text-sm border-gray-600 bg-gray-800 text-white rounded-md p-2" placeholder="e.g., How do our power-users feel about the new interface performance?" value={researchQuestion} onChange={(e) => setResearchQuestion(e.target.value)} /></div></div><div className="pt-5"><div className="flex justify-end"><button onClick={() => onAnalyze(researchQuestion)} className="w-full md:w-auto inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 transition-colors transform hover:scale-105">Analyse Full Data Set</button></div>{error && <p className="text-red-400 text-sm mt-4 text-right">{error}</p>}</div>{modalFile && (<MappingModal file={modalFile} onClose={() => setModalFileId(null)} onSave={handleMappingsUpdate} />)}</div>);
+
+    return (
+        <div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-6">
+            <button onClick={onBack} className="text-sm font-medium text-[#13BBAF] hover:text-teal-400">&larr; Back to upload</button>
+            
+            <div>
+                <h2 className="text-2xl font-semibold text-white">Step 2: Configure Your Data Set</h2>
+                <p className="text-sm text-gray-400">Map columns for each spreadsheet and provide your research question.</p>
+            </div>
+
+            {/* This section has been moved to the top for better UX */}
+            <div>
+                <label htmlFor="research-question" className="block text-lg font-semibold text-white">Research Question</label>
+                <div className="mt-1">
+                    <textarea 
+                        id="research-question" 
+                        rows={3} 
+                        className="shadow-sm focus:ring-[#13BBAF] focus:border-[#13BBAF] block w-full sm:text-sm border-gray-600 bg-gray-800 text-white rounded-md p-2" 
+                        placeholder="e.g., How do our power-users feel about the new interface performance?" 
+                        value={researchQuestion} 
+                        onChange={(e) => setResearchQuestion(e.target.value)} 
+                    />
+                </div>
+            </div>
+            
+            <div className="space-y-3">
+                <h3 className="font-semibold text-lg text-white">Files to Configure:</h3>
+                {dataSet.map(file => (
+                    <div key={file.id} className="flex items-center justify-between p-3 bg-gray-800/70 rounded-md">
+                        <span className="font-medium text-gray-300 truncate">{file.name}</span>
+                        {file.type === 'spreadsheet' && (
+                            <button 
+                                onClick={() => setModalFileId(file.id)} 
+                                className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#13BBAF] hover:bg-teal-600 transition-colors"
+                            >
+                                Map Columns
+                            </button>
+                        )}
+                        {file.type === 'text' && (
+                            <span className="text-sm text-green-400">Ready to Analyse</span>
+                        )}
+                    </div>
+                ))}
+            </div>
+            
+            <div className="pt-5">
+                <div className="flex justify-end">
+                    <button 
+                        onClick={() => onAnalyze(researchQuestion)} 
+                        className="w-full md:w-auto inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 transition-colors transform hover:scale-105"
+                    >
+                        Analyse Full Data Set
+                    </button>
+                </div>
+                {error && <p className="text-red-400 text-sm mt-4 text-right">{error}</p>}
+            </div>
+
+            {modalFile && (
+                <MappingModal 
+                    file={modalFile} 
+                    onClose={() => setModalFileId(null)} 
+                    onSave={handleMappingsUpdate} 
+                />
+            )}
+        </div>
+    );
 };
 
 export const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
@@ -139,7 +203,7 @@ export const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => 
 
 
 // --- Main Page Component ---
-const AnalysisToolPage = ({ user, onNavigate }) => { // Pass user prop
+const AnalysisToolPage = ({ user, onNavigate }) => {
     const [workflowStep, setWorkflowStep] = useState('upload');
     const [dataSet, setDataSet] = useState([]);
     const [analysisResults, setAnalysisResults] = useState(null);
@@ -187,7 +251,6 @@ const AnalysisToolPage = ({ user, onNavigate }) => { // Pass user prop
             results.dataSet = dataSet;
             
             // Save the report to Supabase
-            // No need to pass user.id, as the database default value and RLS policy handle it.
             const { error: insertError } = await supabase.from('projects').insert([{ 
                 project_name: researchQuestion.substring(0, 50) + '...',
                 research_question: researchQuestion,
@@ -232,4 +295,3 @@ const AnalysisToolPage = ({ user, onNavigate }) => { // Pass user prop
 };
 
 export default AnalysisToolPage;
-
