@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>So What AI</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      /* Ensures the app has a dark background by default */
+      body {
+        background-color: #000000;
+      }
+      /* Custom Animations for Aurora Background */
+      @keyframes aurora-1 {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        25% { transform: translate(40px, -20px) scale(1.1); }
+        50% { transform: translate(10px, 30px) scale(0.9); }
+        75% { transform: translate(-30px, 20px) scale(1); }
+      }
+      @keyframes aurora-2 {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        25% { transform: translate(-30px, 40px) scale(0.9); }
+        50% { transform: translate(20px, -10px) scale(1.1); }
+        75% { transform: translate(10px, -30px) scale(1); }
+      }
+      .animate-aurora-1 {
+        animation: aurora-1 15s infinite ease-in-out;
+      }
+      .animate-aurora-2 {
+        animation: aurora-2 18s infinite ease-in-out;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- This is the root element where your React application will be mounted. -->
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    
+    <!-- Parsing Libraries - These must be loaded before the main app script -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js"></script>
+
+    <!-- This script tag is the entry point for your React application. -->
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
