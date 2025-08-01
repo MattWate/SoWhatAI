@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient'; // Make sure this path is correct
+import { supabase } from '../supabaseClient'; // Make sure this path is correct
 import { AnalysisReportPage } from './AnalysisToolPage'; // Re-use the report display!
 
 const ReportViewerPage = ({ projectId, onNavigate }) => {
