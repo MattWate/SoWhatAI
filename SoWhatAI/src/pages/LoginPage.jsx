@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../services/supabaseClient';
+import { supabase } from '../supabaseClient';
 
 const LoginPage = ({ onLogin, onNavigate }) => {
     const [email, setEmail] = useState('');
@@ -61,3 +61,4 @@ const LoginPage = ({ onLogin, onNavigate }) => {
 };
 
 export default LoginPage;
+
