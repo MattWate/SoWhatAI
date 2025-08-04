@@ -1,10 +1,12 @@
+# This file MUST be in the ROOT of your repository.
 [build]
-  # Tell Netlify to change into your project folder first.
+  # Tell Netlify that your project lives in this subfolder.
   base = "SoWhatAI"
-  # This command will be run *inside* the "SoWhatAI" folder.
+  # This command will be run inside the 'base' directory.
   command = "npm install && npm run build"
-  # The location of the finished site, relative to the repo root.
+  # The finished site, relative to the REPO root, is here.
   publish = "SoWhatAI/dist"
 
 [functions]
-    directory = "netlify/functions"
+  # The serverless functions are also inside the project folder.
+  directory = "SoWhatAI/netlify/functions"
