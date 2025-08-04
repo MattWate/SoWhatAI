@@ -2,7 +2,8 @@
 [build]
   base = "SoWhatAI"
   command = "npm install && npm run build"
-  publish = "SoWhatAI/dist"
+  publish = "dist"
 
 [functions]
   directory = "SoWhatAI/netlify/functions"
+
