@@ -3,8 +3,8 @@ import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 
 export default defineConfig({
-  // Set the project root to the current directory
-  root: __dirname,
+  // Explicitly set the project root
+  root: resolve(__dirname, 'SoWhatAI'),
   plugins: [react()],
   build: {
     outDir: 'dist'
