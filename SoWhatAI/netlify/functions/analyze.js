@@ -12,28 +12,28 @@ exports.handler = async (event) => {
       researchQuestion,
       conversationHistory,
       newQuestion,
-      // optional personalization payload from the UI; safe default
       options = {}
     } = body;
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    // Use the same env var your working function uses
+    const apiKey = process.env.GOOGLE_API_KEY;
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY environment variable not set.');
+      throw new Error('GOOGLE_API_KEY environment variable not set.');
     }
 
-    // Prefer a stable model path to avoid 404
-    const MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+    // Use the same model family that worked for you; allow override
+    const MODEL = process.env.GOOGLE_MODEL || 'gemini-2.5-flash-preview-05-20';
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
 
-    // Build prompt
+    // ---------- Build prompt ----------
     let prompt;
-    let responseMimeType = 'application/json'; // default for initial analysis
+    let responseMimeType = 'application/json';
 
     if (conversationHistory && newQuestion) {
-      // FOLLOW-UP QUESTION flow
+      // FOLLOW-UP
       responseMimeType = 'text/plain';
       const historyText = Array.isArray(conversationHistory)
-        ? conversationHistory.map(turn => `${turn.role}: ${turn.content}`).join('\n')
+        ? conversationHistory.map(t => `${t.role}: ${t.content}`).join('\n')
         : '';
 
       prompt = `
@@ -51,37 +51,35 @@ ${historyText}
 
 New Follow-up Question: "${newQuestion}"
 
-Provide a concise, direct answer to the new question. Do not re-summarize the entire dataset. Base your answer strictly on the original data and context.
+Provide a concise, direct answer. Do not re-summarize the entire dataset.
       `.trim();
+
     } else {
       // INITIAL ANALYSIS
-      // Use personalization toggles and focus themes if present
       const {
         includeSentiment = true,
         includeQuant = true,
         includeSoWhat = true,
         includeVerbatim = true,
         focusThemes = []
-      } = options || {};
+      } = options;
 
       const sections = [
         `"narrativeOverview": A synthesized narrative that directly answers the research question.`
       ];
       if (includeSentiment) {
-        sections.push(`"sentiment": The overall sentiment of the text data (Positive, Negative, or Neutral).`);
-        sections.push(`"sentimentDistribution": An object with "positive", "negative", and "neutral" percentage values.`);
+        sections.push(`"sentiment": Overall sentiment (Positive, Negative, or Neutral).`);
+        sections.push(`"sentimentDistribution": {"positive": %, "negative": %, "neutral": %}.`);
       }
-      sections.push(`"themes": An array of the top 3–5 recurring themes. Each theme is an object with "theme", "evidence" (array of direct quotes), "emoji", and "prominence" (1–10).`);
+      sections.push(`"themes": Top 3–5 recurring themes as objects with "theme", "evidence" (array of quotes), "emoji", "prominence" (1–10).`);
       if (includeVerbatim) {
-        sections.push(`"verbatimQuotes": An array of 3 impactful, verbatim quotes.`);
+        sections.push(`"verbatimQuotes": 3 impactful verbatim quotes.`);
       }
       if (includeSoWhat) {
-        sections.push(`"soWhatActions": An array of 3 concrete, actionable recommendations.`);
+        sections.push(`"soWhatActions": 3 concrete, actionable recommendations.`);
       }
       if (includeQuant) {
-        // Quantitative results are appended server-side from structured input;
-        // we still document the field so the shape is predictable.
-        sections.push(`"quantitativeResults": Provided separately from structured numeric inputs; return an array (can be empty).`);
+        sections.push(`"quantitativeResults": Leave as an array; server will populate from structured inputs.`);
       }
 
       const focusText = Array.isArray(focusThemes) && focusThemes.length
@@ -98,17 +96,20 @@ ${textData || ''}
 
 ${focusText}
 
-Your task: Based ONLY on the provided data, generate a comprehensive analysis report in strict JSON format with exactly these fields:
+Your task: Based ONLY on the provided data, return a strictly valid JSON object with exactly these fields:
 - ${sections.join('\n- ')}
 
-Return ONLY valid JSON. Do not include markdown fences or commentary.
+Return ONLY JSON. No markdown fences or commentary.
       `.trim();
     }
 
-    // REST payload (snake_case for generationConfig)
+    // ---------- Call Gemini ----------
     const payload = {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { response_mime_type: responseMimeType }
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        // You’ve proven this casing works in your environment; keep it consistent
+        responseMimeType: responseMimeType
+      }
     };
 
     const response = await fetch(apiUrl, {
@@ -119,8 +120,7 @@ Return ONLY valid JSON. Do not include markdown fences or commentary.
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => '');
-      console.error('Gemini API Error:', response.status, errorBody);
-      // Common 404 reasons: invalid model path/name. Suggest in error.
+      console.error('Google AI API Error:', response.status, errorBody);
       const msg = response.status === 404
         ? `Gemini API failed with status: 404. Check model name/path ("${MODEL}") and API enablement.`
         : `Gemini API failed with status: ${response.status}`;
@@ -128,14 +128,13 @@ Return ONLY valid JSON. Do not include markdown fences or commentary.
     }
 
     const result = await response.json().catch(() => ({}));
-    const aiResponseText =
-      result?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    const aiResponseText = result?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 
     if (!aiResponseText) {
       throw new Error('Empty response from Gemini.');
     }
 
-    // FOLLOW-UP: return plain text answer
+    // FOLLOW-UP: return plain text answer (wrapped in JSON)
     if (conversationHistory && newQuestion) {
       return {
         statusCode: 200,
@@ -155,7 +154,7 @@ Return ONLY valid JSON. Do not include markdown fences or commentary.
       };
     }
 
-    // Rebuild quantitative results from structured inputs
+    // ---------- Quantitative aggregation ----------
     let quantitativeResults = [];
     if (Array.isArray(quantitativeData) && quantitativeData.length > 0) {
       const resultsByFile = {};
@@ -173,36 +172,9 @@ Return ONLY valid JSON. Do not include markdown fences or commentary.
               sorted.length % 2 === 0
                 ? Number(((sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2).toFixed(2))
                 : sorted[Math.floor(sorted.length / 2)];
-            // quick mode calc (optional)
             const freq = new Map();
             let mode = null, best = 0;
             for (const n of numbers) {
               const c = (freq.get(n) || 0) + 1;
               freq.set(n, c);
-              if (c > best) { best = c; mode = n; }
-            }
-            resultsByFile[sourceFile].stats.push({ title, mean, median, mode });
-          }
-        } else if (mapping === 'category' && Array.isArray(values) && values.length > 0) {
-          const counts = values.reduce((acc, val) => { acc[val] = (acc[val] || 0) + 1; return acc; }, {});
-          const categoryData = Object.entries(counts).map(([name, count]) => ({ name, count }));
-          resultsByFile[sourceFile].categories.push({ title, data: categoryData });
-        }
-      });
-      quantitativeResults = Object.values(resultsByFile);
-    }
-
-    const finalReport = {
-      ...aiJson,
-      quantitativeResults,
-      researchQuestion,
-      options
-    };
-
-    return { statusCode: 200, body: JSON.stringify(finalReport) };
-
-  } catch (error) {
-    console.error('Error in analyze function:', error);
-    return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
-  }
-};
+              if
