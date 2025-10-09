@@ -10,127 +10,110 @@ exports.handler = async (event) => {
       textData,
       quantitativeData,
       researchQuestion,
-      conversationHistory,
-      newQuestion,
-      options = {}
+      reportConfig = { components: {} } // Default to an empty object
     } = body;
 
-    const apiKey = process.env.GOOGLE_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return { statusCode: 500, body: JSON.stringify({ error: 'GOOGLE_API_KEY not set' }) };
+      return { statusCode: 500, body: JSON.stringify({ error: 'GEMINI_API_KEY not set' }) };
     }
 
-    const MODEL = process.env.GOOGLE_MODEL || 'gemini-2.5-flash-preview-05-20';
+    const MODEL = 'gemini-1.5-flash-latest';
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
+    
+    // --- Dynamically build the prompt based on reportConfig ---
+    
+    let instructions = [];
+    if (reportConfig.focus) {
+        instructions.push(`Pay special attention to the following context or focus areas: "${reportConfig.focus}".`);
+    }
 
-    // ---- Build prompt & config ----
-    const {
-      includeSentiment = true,
-      includeQuant = true,
-      includeSoWhat = true,
-      includeVerbatim = true,
-      focusThemes = []
-    } = options;
+    // Build instructions for optional components
+    if (!reportConfig.components.sentiment) {
+        instructions.push("Do not include 'sentiment' or 'sentimentDistribution' fields in your response.");
+    }
+    if (!reportConfig.components.quotes) {
+        instructions.push("Do not include the 'verbatimQuotes' field in your response.");
+    }
+     if (!reportConfig.components.soWhat) {
+        instructions.push("Do not include the 'soWhatActions' field in your response.");
+    }
 
-    let prompt;
-    let generationConfig = { responseMimeType: 'application/json' };
+    const instructionText = instructions.length > 0 ? `\nInstructions:\n- ${instructions.join('\n- ')}` : '';
 
-    if (conversationHistory && newQuestion) {
-      // FOLLOW-UP: plain text answer is fine
-      const historyText = Array.isArray(conversationHistory)
-        ? conversationHistory.map(t => `${t.role}: ${t.content}`).join('\n')
-        : '';
-
-      prompt = `
-You are a data analyst who has already provided an initial report. Answer a follow-up question based ONLY on the original data and the conversation history.
-
-Original Research Question: "${researchQuestion}"
-
-Original Data Provided:
-"""
-${textData || ''}
-"""
-
-Conversation History:
-${historyText}
-
-New Follow-up Question: "${newQuestion}"
-
-Provide a concise, direct answer. Do not re-summarize the entire dataset.
-      `.trim();
-
-      generationConfig = { responseMimeType: 'text/plain' };
-
-    } else {
-      const focusText = Array.isArray(focusThemes) && focusThemes.length
-        ? `Prioritize these focus themes/categories when present: ${focusThemes.join(', ')}.`
-        : '';
-
-      // We’ll enforce a JSON schema so the model returns parseable JSON.
-      prompt = `
-As a qualitative and quantitative data analyst, synthesize the following data to answer a specific research question.
+    const prompt = `
+As a qualitative and quantitative data analyst, your task is to synthesize the following data to answer a specific research question.
 
 Research Question: "${researchQuestion}"
 
 Provided Data:
+"""
 ${textData || ''}
+"""
+${instructionText}
 
-${focusText}
+Return ONLY a valid JSON object that strictly adheres to the provided schema. Do not include any markdown formatting, comments, or extra text outside the JSON structure.
+    `.trim();
 
-Return ONLY a JSON object that matches the provided schema exactly. No markdown fences or commentary.
-      `.trim();
-
-      generationConfig = {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            narrativeOverview: { type: "STRING" },
-            // Optional sentiment fields
-            sentiment: { type: "STRING" },
-            sentimentDistribution: {
-              type: "OBJECT",
-              properties: {
-                positive: { type: "NUMBER" },
-                negative: { type: "NUMBER" },
-                neutral:  { type: "NUMBER" }
-              }
-            },
-            // Themes
-            themes: {
-              type: "ARRAY",
-              items: {
+    // --- Dynamically build the response schema ---
+    const properties = {
+        narrativeOverview: { type: "STRING", description: "A detailed narrative summary that directly answers the research question, synthesizing insights from the provided data." },
+        themes: {
+            type: "ARRAY",
+            description: "A list of 3-5 key themes discovered in the data.",
+            items: {
                 type: "OBJECT",
                 properties: {
-                  theme: { type: "STRING" },
-                  evidence: {
-                    type: "ARRAY",
-                    items: { type: "STRING" }
-                  },
-                  emoji: { type: "STRING" },
-                  prominence: { type: "NUMBER" }
+                    theme: { type: "STRING", description: "The name of the theme." },
+                    evidence: {
+                        type: "ARRAY",
+                        description: "A list of direct quotes or data points from the text that support this theme.",
+                        items: { type: "STRING" }
+                    },
+                    emoji: { type: "STRING", description: "A single emoji that represents the theme." },
+                    prominence: { type: "NUMBER", description: "A score from 1-10 indicating how prominent this theme is in the data." }
                 },
                 required: ["theme", "evidence"]
-              }
-            },
-            // Verbatim quotes
-            verbatimQuotes: {
-              type: "ARRAY",
-              items: { type: "STRING" }
-            },
-            // So what
-            soWhatActions: {
-              type: "ARRAY",
-              items: { type: "STRING" }
             }
-          },
-          required: ["narrativeOverview", "themes"]
-        }
-      };
+        },
+    };
 
-      // If user toggled sections off, it's okay if model omits them.
-      // Schema does not force them as required.
+    if (reportConfig.components.sentiment) {
+        properties.sentiment = { type: "STRING", description: "The overall sentiment of the text (Positive, Negative, or Neutral)." };
+        properties.sentimentDistribution = {
+            type: "OBJECT",
+            properties: {
+                positive: { type: "NUMBER", description: "Percentage of positive sentiment." },
+                negative: { type: "NUMBER", description: "Percentage of negative sentiment." },
+                neutral:  { type: "NUMBER", description: "Percentage of neutral sentiment." }
+            }
+        };
     }
+
+    if (reportConfig.components.quotes) {
+        properties.verbatimQuotes = {
+            type: "ARRAY",
+            description: "A list of 3-5 particularly insightful verbatim quotes from the data.",
+            items: { type: "STRING" }
+        };
+    }
+    
+    if (reportConfig.components.soWhat) {
+        properties.soWhatActions = {
+            type: "ARRAY",
+            description: "A list of actionable recommendations or suggestions for future research based on the analysis.",
+            items: { type: "STRING" }
+        };
+    }
+
+    const generationConfig = {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: "OBJECT",
+        properties,
+        required: ["narrativeOverview", "themes"]
+      }
+    };
 
     const payload = {
       contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -152,39 +135,13 @@ Return ONLY a JSON object that matches the provided schema exactly. No markdown 
       };
     }
 
-    const result = await r.json().catch(() => ({}));
+    const result = await r.json();
     const aiResponseText = result?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-
-    if (conversationHistory && newQuestion) {
-      // FOLLOW-UP: return plain text answer
-      return { statusCode: 200, body: JSON.stringify({ answer: aiResponseText }) };
-    }
-
-    // Try strict parse first
-    let aiJson;
-    try {
-      aiJson = JSON.parse(aiResponseText);
-    } catch (e) {
-      // Fallback: try to extract first JSON object from the text (very forgiving)
-      const firstBrace = aiResponseText.indexOf('{');
-      const lastBrace = aiResponseText.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace > firstBrace) {
-        const candidate = aiResponseText.slice(firstBrace, lastBrace + 1);
-        try {
-          aiJson = JSON.parse(candidate);
-        } catch (e2) {
-          console.error('JSON parse failed. Raw text:', aiResponseText.slice(0, 800));
-          return { statusCode: 502, body: JSON.stringify({ error: 'Model did not return valid JSON' }) };
-        }
-      } else {
-        console.error('No JSON-looking content. Raw text:', aiResponseText.slice(0, 800));
-        return { statusCode: 502, body: JSON.stringify({ error: 'Model did not return valid JSON' }) };
-      }
-    }
-
-    // ---- Quantitative aggregation (unchanged) ----
+    const aiJson = JSON.parse(aiResponseText);
+    
+    // --- Quantitative aggregation (unchanged from your version) ---
     let quantitativeResults = [];
-    if (Array.isArray(quantitativeData) && quantitativeData.length > 0) {
+    if (reportConfig.components.quantitative && Array.isArray(quantitativeData) && quantitativeData.length > 0) {
       const byFile = {};
       quantitativeData.forEach(({ title, values, mapping, sourceFile }) => {
         if (!byFile[sourceFile]) byFile[sourceFile] = { sourceFile, stats: [], categories: [] };
@@ -219,7 +176,6 @@ Return ONLY a JSON object that matches the provided schema exactly. No markdown 
       ...aiJson,
       quantitativeResults,
       researchQuestion,
-      options
     };
 
     return { statusCode: 200, body: JSON.stringify(finalReport) };
