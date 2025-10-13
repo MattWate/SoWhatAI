@@ -13,18 +13,20 @@ exports.handler = async (event) => {
       reportConfig = { components: {} }
     } = body;
 
-    // Make sure your Netlify Site has this env var set
-    const apiKey = process.env.GEMINI_API_KEY;
+    // Accept either env var name to match your other project
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return {
         statusCode: 500,
-        body: JSON.stringify({ error: 'GEMINI_API_KEY not set in Netlify environment variables.' })
+        body: JSON.stringify({ error: 'GOOGLE_API_KEY or GEMINI_API_KEY must be set in Netlify environment variables.' })
       };
     }
 
-    // Use a stable, REST-available model and a stable API version.
-    const MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-    const apiUrl = `https://generativelanguage.googleapis.com/v1/models/${MODEL}:generateContent?key=${apiKey}`;
+    // Default to a stable, known-good model; override via env if you want.
+    const MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash'; // 'gemini-1.5-flash' also fine
+    // Gemini 2.0 models generally need v1beta on REST; 1.5 works on v1.
+    const apiVersion = MODEL.startsWith('gemini-2.0') ? 'v1beta' : 'v1';
+    const apiUrl = `https://generativelanguage.googleapis.com/${apiVersion}/models/${MODEL}:generateContent?key=${apiKey}`;
 
     // ---- Build instructions ----
     const instructions = [];
@@ -86,7 +88,7 @@ exports.handler = async (event) => {
       properties.soWhatActions = { type: "ARRAY", items: { type: "STRING" } };
     }
 
-    // IMPORTANT: use snake_case in REST for generationConfig
+    // REST expects snake_case for generationConfig keys
     const generationConfig = {
       response_mime_type: 'application/json',
       response_schema: { type: "OBJECT", properties, required: ["narrativeOverview", "themes"] }
@@ -105,7 +107,6 @@ exports.handler = async (event) => {
 
     const rawText = await r.text().catch(() => '');
     if (!r.ok) {
-      // Surface the API’s JSON error message if present
       let details = rawText;
       try {
         const maybeJson = JSON.parse(rawText);
@@ -116,19 +117,20 @@ exports.handler = async (event) => {
         statusCode: r.status,
         body: JSON.stringify({
           error: `Google AI API Error ${r.status}`,
-          details: (details || '').slice(0, 1000),
+          details: (details || '').slice(0, 2000),
           url: apiUrl,
-          model: MODEL
+          model: MODEL,
+          version: apiVersion
         })
       };
     }
 
-    // Parse valid JSON response
+    // Parse JSON envelope from API
     let result;
     try {
       result = JSON.parse(rawText);
     } catch {
-      console.error('Non-JSON response from API:', rawText.slice(0, 800));
+      console.error('Non-JSON response from API:', rawText.slice(0, 1000));
       return {
         statusCode: 502,
         body: JSON.stringify({ error: 'Unexpected non-JSON response from Gemini.' })
@@ -138,7 +140,7 @@ exports.handler = async (event) => {
     const aiResponseText =
       result?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
 
-    // Strip accidental code fences if the model wrapped output
+    // Strip occasional code fences
     const cleaned = aiResponseText
       .replace(/^```json\s*/i, '')
       .replace(/^```\s*/i, '')
@@ -149,7 +151,7 @@ exports.handler = async (event) => {
     try {
       aiJson = JSON.parse(cleaned);
     } catch (e) {
-      console.error('Failed to parse AI response as JSON:', cleaned.slice(0, 1200));
+      console.error('Failed to parse AI response as JSON:', cleaned.slice(0, 1500));
       return {
         statusCode: 500,
         body: JSON.stringify({ error: 'The AI returned an invalid response that could not be parsed.' })
