@@ -61,40 +61,51 @@ exports.handler = async (event) => {
   `Data:\n"""\n${textData || ''}\n"""\n`;
 
 
-    // ---- Dynamic response schema ----
-    const properties = {
-      narrativeOverview: { type: "STRING" },
-      themes: {
-        type: "ARRAY",
-        items: {
-          type: "OBJECT",
-          properties: {
-            theme: { type: "STRING" },
-            evidence: { type: "ARRAY", items: { type: "STRING" } },
-            emoji: { type: "STRING" },
-            prominence: { type: "NUMBER" }
-          },
-          required: ["theme", "evidence"]
-        }
+// ---- Dynamic response schema ----
+// STEP 1B: extend theme schema to include analysis fields
+const properties = {
+  narrativeOverview: { type: "STRING" },
+  themes: {
+    type: "ARRAY",
+    items: {
+      type: "OBJECT",
+      properties: {
+        theme: { type: "STRING" },
+        evidence: { type: "ARRAY", items: { type: "STRING" } },
+        emoji: { type: "STRING" },
+        prominence: { type: "NUMBER" },
+
+        // New theme-level analysis fields
+        whyItMatters: { type: "STRING" },                // 1–2 sentence significance
+        drivers: { type: "ARRAY", items: { type: "STRING" } },       // causes/motivators
+        barriers: { type: "ARRAY", items: { type: "STRING" } },      // frictions/constraints
+        tensions: { type: "ARRAY", items: { type: "STRING" } },      // trade-offs/contradictions
+        opportunities: { type: "ARRAY", items: { type: "STRING" } }, // actionable ideas
+        confidence: { type: "NUMBER" }                                 // 0–1
       },
-    };
-    if (reportConfig?.components?.sentiment) {
-      properties.sentiment = { type: "STRING" };
-      properties.sentimentDistribution = {
-        type: "OBJECT",
-        properties: {
-          positive: { type: "NUMBER" },
-          negative: { type: "NUMBER" },
-          neutral: { type: "NUMBER" }
-        }
-      };
+      required: ["theme", "evidence", "whyItMatters"]
     }
-    if (reportConfig?.components?.quotes) {
-      properties.verbatimQuotes = { type: "ARRAY", items: { type: "STRING" } };
+  },
+};
+
+if (reportConfig?.components?.sentiment) {
+  properties.sentiment = { type: "STRING" };
+  properties.sentimentDistribution = {
+    type: "OBJECT",
+    properties: {
+      positive: { type: "NUMBER" },
+      negative: { type: "NUMBER" },
+      neutral:  { type: "NUMBER" }
     }
-    if (reportConfig?.components?.soWhat) {
-      properties.soWhatActions = { type: "ARRAY", items: { type: "STRING" } };
-    }
+  };
+}
+if (reportConfig?.components?.quotes) {
+  properties.verbatimQuotes = { type: "ARRAY", items: { type: "STRING" } };
+}
+if (reportConfig?.components?.soWhat) {
+  properties.soWhatActions = { type: "ARRAY", items: { type: "STRING" } };
+}
+
 
     // REST expects snake_case for generationConfig keys
     const generationConfig = {
@@ -207,4 +218,5 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: JSON.stringify({ error: error.message || String(error) }) };
   }
 };
+
 
