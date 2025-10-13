@@ -47,11 +47,19 @@ exports.handler = async (event) => {
       instructions.length > 0 ? `\nInstructions:\n- ${instructions.join('\n- ')}` : '';
 
     const prompt =
-      `As a qualitative data analyst, synthesize the following data to answer the research question.` +
-      ` ${instructionText}\n\n` +
-      `Research Question: "${researchQuestion || ''}"\n\n` +
-      `Data:\n"""\n${textData || ''}\n"""\n\n` +
-      `Return ONLY a valid JSON object matching the schema.`;
+  `You are an insights analyst. Extract themes AND provide theme-level synthesis.\n` +
+  `For EACH theme, include:\n` +
+  `- whyItMatters: 1–2 sentence explanation of the significance/so-what\n` +
+  `- drivers: 2–4 bullet causes or motivators (short phrases)\n` +
+  `- barriers: 2–4 bullet frictions or constraints (short phrases)\n` +
+  `- tensions: 1–3 short bullets capturing trade-offs or contradictions\n` +
+  `- opportunities: 2–4 actionable opportunities (imperative phrasing)\n` +
+  `- confidence: number 0–1 indicating confidence from evidence quality\n\n` +
+  `Return ONLY JSON conforming to the provided schema.` +
+  ` ${instructionText}\n\n` +
+  `Research Question: "${researchQuestion || ''}"\n\n` +
+  `Data:\n"""\n${textData || ''}\n"""\n`;
+
 
     // ---- Dynamic response schema ----
     const properties = {
@@ -199,3 +207,4 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: JSON.stringify({ error: error.message || String(error) }) };
   }
 };
+
