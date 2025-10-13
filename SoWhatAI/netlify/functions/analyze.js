@@ -46,44 +46,47 @@ exports.handler = async (event) => {
     const instructionText =
       instructions.length > 0 ? `\nInstructions:\n- ${instructions.join('\n- ')}` : '';
 
-    const prompt =
-  `You are an insights analyst. Extract themes AND provide theme-level synthesis.\n` +
-  `For EACH theme, include:\n` +
-  `- whyItMatters: 1–2 sentence explanation of the significance/so-what\n` +
-  `- drivers: 2–4 bullet causes or motivators (short phrases)\n` +
-  `- barriers: 2–4 bullet frictions or constraints (short phrases)\n` +
-  `- tensions: 1–3 short bullets capturing trade-offs or contradictions\n` +
-  `- opportunities: 2–4 actionable opportunities (imperative phrasing)\n` +
-  `- confidence: number 0–1 indicating confidence from evidence quality\n\n` +
-  `Return ONLY JSON conforming to the provided schema.` +
-  ` ${instructionText}\n\n` +
+// --- Thematic analysis with required interpretation & tight quote policy ---
+const prompt =
+  `You are a senior insights analyst. Identify themes AND produce interpretation for each theme.\n\n` +
+  `For EACH theme, you MUST return:\n` +
+  `- theme: concise name (title case)\n` +
+  `- themeNarrative: 3–6 sentences that interpret the evidence (what it means, why it matters, implications)\n` +
+  `- drivers: 2–4 short bullets (motivators/causes)\n` +
+  `- barriers: 2–4 short bullets (frictions/constraints)\n` +
+  `- tensions: 1–3 concise bullets (trade-offs/contradictions)\n` +
+  `- opportunities: 2–4 actionable bullets (imperative phrasing)\n` +
+  `- confidence: number 0–1 based on evidence quality/consistency\n` +
+  `- evidence: 2–3 quotes MAX. Each quote must be meaningful on its own (8–30 words), no filler, no duplicates.\n\n` +
+  `Rules:\n` +
+  `- Focus on interpretation over summary. Do NOT regurgitate data.\n` +
+  `- Quotes must be trimmed to the most meaningful sentence fragment and anonymised.\n` +
+  `- Avoid generic statements; be specific to this dataset.\n` +
+  `Return ONLY valid JSON conforming to the schema.\n` +
+  `${instructionText}\n\n` +
   `Research Question: "${researchQuestion || ''}"\n\n` +
   `Data:\n"""\n${textData || ''}\n"""\n`;
 
 
+
 // ---- Dynamic response schema ----
 // STEP 1B: extend theme schema to include analysis fields
-const properties = {
-  narrativeOverview: { type: "STRING" },
-  themes: {
-    type: "ARRAY",
-    items: {
-      type: "OBJECT",
-      properties: {
-        theme: { type: "STRING" },
-        evidence: { type: "ARRAY", items: { type: "STRING" } },
-        emoji: { type: "STRING" },
-        prominence: { type: "NUMBER" },
+properties: {
+  theme: { type: "STRING" },
+  // INTERPRETATION (required)
+  themeNarrative: { type: "STRING" },
+  drivers: { type: "ARRAY", items: { type: "STRING" } },
+  barriers: { type: "ARRAY", items: { type: "STRING" } },
+  tensions: { type: "ARRAY", items: { type: "STRING" } },
+  opportunities: { type: "ARRAY", items: { type: "STRING" } },
+  confidence: { type: "NUMBER" },
 
-        // New theme-level analysis fields
-        whyItMatters: { type: "STRING" },                // 1–2 sentence significance
-        drivers: { type: "ARRAY", items: { type: "STRING" } },       // causes/motivators
-        barriers: { type: "ARRAY", items: { type: "STRING" } },      // frictions/constraints
-        tensions: { type: "ARRAY", items: { type: "STRING" } },      // trade-offs/contradictions
-        opportunities: { type: "ARRAY", items: { type: "STRING" } }, // actionable ideas
-        confidence: { type: "NUMBER" }                                 // 0–1
-      },
-      required: ["theme", "evidence", "whyItMatters"]
+  // LEGACY / DISPLAY
+  evidence: { type: "ARRAY", items: { type: "STRING" } },
+  emoji: { type: "STRING" },
+  prominence: { type: "NUMBER" }
+},
+required: ["theme", "themeNarrative"]
     }
   },
 };
@@ -218,5 +221,6 @@ if (reportConfig?.components?.soWhat) {
     return { statusCode: 500, body: JSON.stringify({ error: error.message || String(error) }) };
   }
 };
+
 
 
