@@ -18,20 +18,23 @@ exports.handler = async (event) => {
     if (!apiKey) {
       return {
         statusCode: 500,
-        body: JSON.stringify({ error: 'GOOGLE_API_KEY or GEMINI_API_KEY must be set in Netlify environment variables.' })
+        body: JSON.stringify({
+          error: 'GOOGLE_API_KEY or GEMINI_API_KEY must be set in Netlify environment variables.'
+        })
       };
     }
 
-    // Default to a stable, known-good model; override via env if you want.
+    // Model & API version
     const MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash'; // 'gemini-1.5-flash' also fine
-    // Gemini 2.0 models generally need v1beta on REST; 1.5 works on v1.
     const apiVersion = MODEL.startsWith('gemini-2.0') ? 'v1beta' : 'v1';
     const apiUrl = `https://generativelanguage.googleapis.com/${apiVersion}/models/${MODEL}:generateContent?key=${apiKey}`;
 
     // ---- Build instructions ----
     const instructions = [];
     if (reportConfig.focus) {
-      instructions.push(`Pay special attention to the following context or focus areas: "${reportConfig.focus}".`);
+      instructions.push(
+        `Pay special attention to the following context or focus areas: "${reportConfig.focus}".`
+      );
     }
     if (!reportConfig?.components?.sentiment) {
       instructions.push("Do not include 'sentiment' or 'sentimentDistribution' fields in your response.");
@@ -46,69 +49,71 @@ exports.handler = async (event) => {
     const instructionText =
       instructions.length > 0 ? `\nInstructions:\n- ${instructions.join('\n- ')}` : '';
 
-// --- Thematic analysis with required interpretation & tight quote policy ---
-const prompt =
-  `You are a senior insights analyst. Identify themes AND produce interpretation for each theme.\n\n` +
-  `For EACH theme, you MUST return:\n` +
-  `- theme: concise name (title case)\n` +
-  `- themeNarrative: 3–6 sentences that interpret the evidence (what it means, why it matters, implications)\n` +
-  `- drivers: 2–4 short bullets (motivators/causes)\n` +
-  `- barriers: 2–4 short bullets (frictions/constraints)\n` +
-  `- tensions: 1–3 concise bullets (trade-offs/contradictions)\n` +
-  `- opportunities: 2–4 actionable bullets (imperative phrasing)\n` +
-  `- confidence: number 0–1 based on evidence quality/consistency\n` +
-  `- evidence: 2–3 quotes MAX. Each quote must be meaningful on its own (8–30 words), no filler, no duplicates.\n\n` +
-  `Rules:\n` +
-  `- Focus on interpretation over summary. Do NOT regurgitate data.\n` +
-  `- Quotes must be trimmed to the most meaningful sentence fragment and anonymised.\n` +
-  `- Avoid generic statements; be specific to this dataset.\n` +
-  `Return ONLY valid JSON conforming to the schema.\n` +
-  `${instructionText}\n\n` +
-  `Research Question: "${researchQuestion || ''}"\n\n` +
-  `Data:\n"""\n${textData || ''}\n"""\n`;
+    // --- Thematic analysis with required interpretation & tight quote policy ---
+    const prompt =
+      `You are a senior insights analyst. Identify themes AND produce interpretation for each theme.\n\n` +
+      `For EACH theme, you MUST return:\n` +
+      `- theme: concise name (title case)\n` +
+      `- themeNarrative: 3–6 sentences that interpret the evidence (what it means, why it matters, implications)\n` +
+      `- drivers: 2–4 short bullets (motivators/causes)\n` +
+      `- barriers: 2–4 short bullets (frictions/constraints)\n` +
+      `- tensions: 1–3 concise bullets (trade-offs/contradictions)\n` +
+      `- opportunities: 2–4 actionable bullets (imperative phrasing)\n` +
+      `- confidence: number 0–1 based on evidence quality/consistency\n` +
+      `- evidence: 2–3 quotes MAX. Each quote must be meaningful on its own (8–30 words), no filler, no duplicates.\n\n` +
+      `Rules:\n` +
+      `- Focus on interpretation over summary. Do NOT regurgitate data.\n` +
+      `- Quotes must be trimmed to the most meaningful sentence fragment and anonymised.\n` +
+      `- Avoid generic statements; be specific to this dataset.\n` +
+      `Return ONLY valid JSON conforming to the schema.\n` +
+      `${instructionText}\n\n` +
+      `Research Question: "${researchQuestion || ''}"\n\n` +
+      `Data:\n"""\n${textData || ''}\n"""\n`;
 
+    // ---- Dynamic response schema ---- (STEP 1B)
+    const properties = {
+      narrativeOverview: { type: "STRING" },
+      themes: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            // Required interpretation fields
+            theme: { type: "STRING" },
+            themeNarrative: { type: "STRING" },
+            drivers: { type: "ARRAY", items: { type: "STRING" } },
+            barriers: { type: "ARRAY", items: { type: "STRING" } },
+            tensions: { type: "ARRAY", items: { type: "STRING" } },
+            opportunities: { type: "ARRAY", items: { type: "STRING" } },
+            confidence: { type: "NUMBER" },
 
+            // Legacy/display fields
+            evidence: { type: "ARRAY", items: { type: "STRING" } },
+            emoji: { type: "STRING" },
+            prominence: { type: "NUMBER" }
+          },
+          required: ["theme", "themeNarrative"]
+        }
+      }
+    };
 
-// ---- Dynamic response schema ----
-// STEP 1B: extend theme schema to include analysis fields
-properties: {
-  theme: { type: "STRING" },
-  // INTERPRETATION (required)
-  themeNarrative: { type: "STRING" },
-  drivers: { type: "ARRAY", items: { type: "STRING" } },
-  barriers: { type: "ARRAY", items: { type: "STRING" } },
-  tensions: { type: "ARRAY", items: { type: "STRING" } },
-  opportunities: { type: "ARRAY", items: { type: "STRING" } },
-  confidence: { type: "NUMBER" },
-
-  // LEGACY / DISPLAY
-  evidence: { type: "ARRAY", items: { type: "STRING" } },
-  emoji: { type: "STRING" },
-  prominence: { type: "NUMBER" }
-},
-required: ["theme", "themeNarrative"]
+    if (reportConfig?.components?.sentiment) {
+      properties.sentiment = { type: "STRING" };
+      properties.sentimentDistribution = {
+        type: "OBJECT",
+        properties: {
+          positive: { type: "NUMBER" },
+          negative: { type: "NUMBER" },
+          neutral: { type: "NUMBER" }
+        }
+      };
     }
-  },
-};
-
-if (reportConfig?.components?.sentiment) {
-  properties.sentiment = { type: "STRING" };
-  properties.sentimentDistribution = {
-    type: "OBJECT",
-    properties: {
-      positive: { type: "NUMBER" },
-      negative: { type: "NUMBER" },
-      neutral:  { type: "NUMBER" }
+    if (reportConfig?.components?.quotes) {
+      properties.verbatimQuotes = { type: "ARRAY", items: { type: "STRING" } };
     }
-  };
-}
-if (reportConfig?.components?.quotes) {
-  properties.verbatimQuotes = { type: "ARRAY", items: { type: "STRING" } };
-}
-if (reportConfig?.components?.soWhat) {
-  properties.soWhatActions = { type: "ARRAY", items: { type: "STRING" } };
-}
-
+    if (reportConfig?.components?.soWhat) {
+      properties.soWhatActions = { type: "ARRAY", items: { type: "STRING" } };
+    }
 
     // REST expects snake_case for generationConfig keys
     const generationConfig = {
@@ -180,6 +185,41 @@ if (reportConfig?.components?.soWhat) {
       };
     }
 
+    // --- A3: Post-process to enforce narrative + trim quotes ---
+    function dedupeCaseInsensitive(arr = []) {
+      const seen = new Set();
+      const out = [];
+      for (const s of arr) {
+        const key = String(s || '').trim().toLowerCase();
+        if (key && !seen.has(key)) { seen.add(key); out.push(s); }
+      }
+      return out;
+    }
+    function wordCount(s = '') { return (s.trim().match(/\S+/g) || []).length; }
+
+    if (Array.isArray(aiJson?.themes)) {
+      aiJson.themes = aiJson.themes.map((t) => {
+        const narrative = (t.themeNarrative || t.whyItMatters || '').trim();
+
+        let quotes = Array.isArray(t.evidence) ? dedupeCaseInsensitive(t.evidence) : [];
+        quotes = quotes
+          .map(q => String(q || '').replace(/\s+/g, ' ').trim())
+          .filter(q => wordCount(q) >= 8 && wordCount(q) <= 30)
+          .slice(0, 3);
+
+        const asArray = (x) => Array.isArray(x) ? x : [];
+        return {
+          ...t,
+          themeNarrative: narrative,
+          evidence: quotes,
+          drivers: asArray(t.drivers).slice(0, 6),
+          barriers: asArray(t.barriers).slice(0, 6),
+          tensions: asArray(t.tensions).slice(0, 4),
+          opportunities: asArray(t.opportunities).slice(0, 6)
+        };
+      });
+    }
+
     // ---- Quantitative aggregation (unchanged) ----
     let quantitativeResults = [];
     if (reportConfig?.components?.quantitative && Array.isArray(quantitativeData) && quantitativeData.length > 0) {
@@ -208,6 +248,7 @@ if (reportConfig?.components?.soWhat) {
       quantitativeResults = Object.values(byFile);
     }
 
+    // --- Final payload ---
     const finalReport = {
       ...aiJson,
       quantitativeResults,
@@ -221,6 +262,3 @@ if (reportConfig?.components?.soWhat) {
     return { statusCode: 500, body: JSON.stringify({ error: error.message || String(error) }) };
   }
 };
-
-
-
