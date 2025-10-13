@@ -137,9 +137,15 @@ Return ONLY a valid JSON object that strictly adheres to the provided schema. Do
 
     const result = await r.json();
     const aiResponseText = result?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    const aiJson = JSON.parse(aiResponseText);
+    let aiJson;
+    try {
+        aiJson = JSON.parse(aiResponseText);
+    } catch(e) {
+        console.error("Failed to parse AI response as JSON:", aiResponseText);
+        return { statusCode: 500, body: JSON.stringify({ error: "The AI returned an invalid response."}) };
+    }
     
-    // --- Quantitative aggregation (unchanged from your version) ---
+    // --- Quantitative aggregation ---
     let quantitativeResults = [];
     if (reportConfig.components.quantitative && Array.isArray(quantitativeData) && quantitativeData.length > 0) {
       const byFile = {};
@@ -185,3 +191,4 @@ Return ONLY a valid JSON object that strictly adheres to the provided schema. Do
     return { statusCode: 500, body: JSON.stringify({ error: error.message || String(error) }) };
   }
 };
+
