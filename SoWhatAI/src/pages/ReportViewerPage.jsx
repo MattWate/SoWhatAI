@@ -10,6 +10,125 @@ const countWords = (str = '') =>
 
 const parseDate = (s) => (s ? new Date(s) : null);
 
+// ---------- THEME INSIGHTS (Step 2) ----------
+const Pill = ({ children }) => (
+  <span className="inline-block bg-gray-800/70 text-gray-200 text-xs px-2 py-1 rounded-md mr-2 mb-2 border border-gray-700">
+    {children}
+  </span>
+);
+
+const Section = ({ title, children }) => (
+  <div className="mt-3">
+    <div className="text-gray-300 text-sm font-semibold mb-1">{title}</div>
+    <div className="text-gray-200">{children}</div>
+  </div>
+);
+
+const ThemeInsightCard = ({ t }) => {
+  const [open, setOpen] = useState(true);
+  const conf = typeof t?.confidence === 'number'
+    ? Math.round(t.confidence * 100)
+    : null;
+
+  return (
+    <div className="bg-[#121820] border border-gray-700 rounded-xl p-4 mb-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="text-lg text-white font-semibold">
+            {t?.emoji ? `${t.emoji} ` : ''}{t?.theme || 'Untitled Theme'}
+          </div>
+          {typeof t?.prominence === 'number' && (
+            <div className="text-xs text-gray-400">
+              Prominence: {Math.round(t.prominence * 100)}%
+            </div>
+          )}
+          {conf !== null && (
+            <div className="text-xs text-gray-400 ml-3">
+              Confidence: {conf}%
+            </div>
+          )}
+        </div>
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="text-teal-300 hover:text-teal-200 text-sm"
+        >
+          {open ? 'Collapse' : 'Expand'}
+        </button>
+      </div>
+
+      {open && (
+        <div className="mt-2">
+          {t?.whyItMatters && (
+            <Section title="Why it matters">
+              <p className="text-gray-200 leading-relaxed">{t.whyItMatters}</p>
+            </Section>
+          )}
+
+          {(t?.drivers?.length || t?.barriers?.length) && (
+            <div className="grid md:grid-cols-2 gap-3">
+              {t?.drivers?.length > 0 && (
+                <Section title="Key drivers">
+                  <div className="flex flex-wrap">
+                    {t.drivers.slice(0, 6).map((d, i) => <Pill key={i}>{d}</Pill>)}
+                  </div>
+                </Section>
+              )}
+              {t?.barriers?.length > 0 && (
+                <Section title="Barriers / frictions">
+                  <div className="flex flex-wrap">
+                    {t.barriers.slice(0, 6).map((b, i) => <Pill key={i}>{b}</Pill>)}
+                  </div>
+                </Section>
+              )}
+            </div>
+          )}
+
+          {t?.tensions?.length > 0 && (
+            <Section title="Tensions & trade-offs">
+              <ul className="list-disc list-inside text-gray-200 space-y-1">
+                {t.tensions.slice(0, 4).map((x, i) => <li key={i}>{x}</li>)}
+              </ul>
+            </Section>
+          )}
+
+          {t?.opportunities?.length > 0 && (
+            <Section title="Opportunities">
+              <ul className="list-disc list-inside text-gray-200 space-y-1">
+                {t.opportunities.slice(0, 6).map((o, i) => <li key={i}>{o}</li>)}
+              </ul>
+            </Section>
+          )}
+
+          {t?.evidence?.length > 0 && (
+            <Section title="Supporting quotes">
+              <div className="space-y-2">
+                {t.evidence.slice(0, 3).map((q, i) => (
+                  <blockquote
+                    key={i}
+                    className="text-gray-300 italic border-l-4 border-gray-700 pl-3"
+                  >
+                    “{q}”
+                  </blockquote>
+                ))}
+              </div>
+            </Section>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ThemeInsightsPanel = ({ themes = [] }) => {
+  if (!Array.isArray(themes) || themes.length === 0) return null;
+  return (
+    <div className="mt-8">
+      <div className="text-white font-semibold text-lg mb-2">Theme Insights</div>
+      {themes.map((t, idx) => <ThemeInsightCard key={idx} t={t} />)}
+    </div>
+  );
+};
+
 // ---------- Chat ----------
 const ChatInterface = ({ report, textData }) => {
   const [conversation, setConversation] = useState([]);
@@ -31,31 +150,26 @@ const ChatInterface = ({ report, textData }) => {
     setIsAiResponding(true);
 
     try {
-      // NOTE: This uses the same analyze function; you can swap to a dedicated followup function later.
       const response = await fetch('/.netlify/functions/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           textData,
           researchQuestion: report.researchQuestion || report?.results?.researchQuestion || '',
-          // Focus the answer on the question and existing overview/themes.
           reportConfig: {
             focus: `Answer the user's follow-up succinctly based ONLY on the dataset and the research question. Keep answers grounded in evidence.`,
-            components: {} // no extra fields needed
+            components: {}
           }
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to get a response from the AI.');
-      }
+      if (!response.ok) throw new Error('Failed to get a response from the AI.');
 
       const result = await response.json();
-      // Try to surface a sensible text field
       const aiText =
         result?.narrativeOverview ||
         result?.answer ||
-        result?.themes?.map(t => `• ${t.theme}`).join('\n') ||
+        (Array.isArray(result?.themes) ? result.themes.map(t => `• ${t.theme}`).join('\n') : '') ||
         'No answer was generated.';
 
       setConversation(prev => [...prev, { role: 'ai', content: aiText }]);
@@ -101,7 +215,7 @@ const ChatInterface = ({ report, textData }) => {
   );
 };
 
-// ---------- Top Report Header (new) ----------
+// ---------- Top Report Header ----------
 const ReportHeader = ({
   report,
   dataSet = [],
@@ -156,7 +270,7 @@ const ReportHeader = ({
         </blockquote>
       </div>
 
-      {/* Overview */}
+      {/* Overview & So What */}
       <div className="grid md:grid-cols-2 gap-4">
         <div className="bg-gradient-to-br from-purple-900/60 to-purple-800/40 border border-purple-900/40 rounded-xl p-4">
           <div className="text-white font-semibold text-lg mb-2">Overview</div>
@@ -181,13 +295,12 @@ const ReportHeader = ({
           </div>
         </div>
 
-        {/* So What? */}
         <div className="bg-gray-800/70 border border-gray-700 rounded-xl p-4">
           <div className="text-white font-semibold text-lg mb-2">So What? (Actions & Recommendations)</div>
           <ul className="list-disc list-inside text-gray-200 space-y-2">
             {(report?.soWhatActions && report.soWhatActions.length > 0
               ? report.soWhatActions
-              : (report?.recommendations || []) // fallback if you stored them under a different key
+              : (report?.recommendations || [])
             ).slice(0, 6).map((item, idx) => (
               <li key={idx}>{item}</li>
             ))}
@@ -240,9 +353,9 @@ const ReportViewerPage = ({ projectId, onNavigate }) => {
     setIsDownloading(true);
     try {
       const canvas = await html2canvas(reportPrintRef.current, {
-        scale: 2, // sharper
+        scale: 2,
         useCORS: true,
-        backgroundColor: '#0b0f14', // same dark background
+        backgroundColor: '#0b0f14',
       });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'pt', 'a4');
@@ -296,7 +409,6 @@ const ReportViewerPage = ({ projectId, onNavigate }) => {
             focus:
               'Write a 200–300 word executive-style overview in 2–3 short paragraphs. Synthesize patterns and interpret what they mean for shopper motivations and decision-making. Avoid bullet points and avoid repeating the research question.',
             components: {
-              // We only need the narrative/overview back; other components off:
               sentiment: false, quotes: false, soWhat: false, quantitative: false
             }
           }
@@ -311,7 +423,7 @@ const ReportViewerPage = ({ projectId, onNavigate }) => {
       const text =
         res?.narrativeOverview ||
         res?.overview ||
-        res?.themes?.map(t => `• ${t.theme}`).join('\n') ||
+        (Array.isArray(res?.themes) ? res.themes.map(t => `• ${t.theme}`).join('\n') : '') ||
         '';
       if (text) setLongOverview(text);
     } catch (e) {
@@ -345,7 +457,7 @@ const ReportViewerPage = ({ projectId, onNavigate }) => {
         isRegenerating={isRegenerating}
       />
 
-      {/* Existing printable block */}
+      {/* Printable area: existing report + theme insights */}
       <div ref={reportPrintRef}>
         <AnalysisReportPage
           dataSet={dataSet}
@@ -354,6 +466,9 @@ const ReportViewerPage = ({ projectId, onNavigate }) => {
           onDownload={generatePdf}
           isDownloading={isDownloading}
         />
+
+        {/* NEW: Theme-level analysis injected after the existing content */}
+        <ThemeInsightsPanel themes={report?.themes || []} />
       </div>
 
       {/* Chat */}
