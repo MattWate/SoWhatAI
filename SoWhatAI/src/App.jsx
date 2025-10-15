@@ -12,7 +12,7 @@ async function getUser() {
 async function listProjects() {
   const { data, error } = await supabase
     .from('projects')
-    .select('id, name, created_at')
+    .select('id, project_name, created_at')
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data || [];
@@ -21,7 +21,7 @@ async function listProjects() {
 async function getProject(id) {
   const { data, error } = await supabase
     .from('projects')
-    .select('id, name, created_at, analysis_report')
+    .select('id, project_name, created_at, analysis_report')
     .eq('id', id)
     .single();
   if (error) throw error;
@@ -33,7 +33,7 @@ async function createProject({ name, analysis_report }) {
   if (!user) throw new Error('Not signed in');
   const { data, error } = await supabase
     .from('projects')
-    .insert({ user_id: user.id, name, analysis_report })
+    .insert({ user_id: user.id, project_name, analysis_report })
     .select('id, name, created_at')
     .single();
   if (error) throw error;
@@ -1288,3 +1288,4 @@ export default function App() {
     </div>
   );
 }
+
