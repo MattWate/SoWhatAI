@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'; // FIX: Added useRef
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from './supabaseClient.js';
-import jsPDF from 'jspdf'; // FIX: Added jspdf import for downloading
-import html2canvas from 'html2canvas'; // FIX: Added html2canvas import for downloading
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 /* =========================================================
    Supabase helpers (CRUD)
@@ -35,10 +35,8 @@ async function createProject({ name, analysis_report }) {
   if (!user) throw new Error('Not signed in');
   const { data, error } = await supabase
     .from('projects')
-    // FIX: Mapped 'name' argument to 'project_name' column
-    .insert({ user_id: user.id, project_name: name, analysis_report })
-    // FIX: Selected the correct 'project_name' column
-    .select('id, project_name, created_at')
+    .insert({ user_id: user.id, project_name: name, analysis_report }) // <-- FIX 1
+    .select('id, project_name, created_at') // <-- FIX 1
     .single();
   if (error) throw error;
   return data;
@@ -197,7 +195,7 @@ const LoginPage = ({ onLogin, onNavigate }) => {
             className="mt-1 block w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white shadow-sm focus:outline-none focus:ring-[#13BBAF] focus:border-[#13BBAF]"
           />
         </div>
-      : <div>
+        <div>
           <label htmlFor="password" className="block text-sm font-medium text-gray-300">Password</label>
           <input
             type="password" id="password" value={password} onChange={(e) => setPassword(e.target.value)}
@@ -268,8 +266,7 @@ const DashboardPage = ({ user, onNavigate, onOpenProject }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {projects.map(p => (
               <div key={p.id} className="p-4 bg-gray-800/60 border border-gray-700 rounded-lg">
-                {/* FIX: Changed p.name to p.project_name */}
-                <div className="text-white font-semibold">{p.project_name || 'Untitled Project'}</div>
+                <div className="text-white font-semibold">{p.project_name || 'Untitled Project'}</div> {/* <-- FIX 2 */}
                 <div className="text-gray-500 text-sm">{new Date(p.created_at).toLocaleString()}</div>
                 <div className="mt-3 flex gap-2">
                   <button
@@ -577,7 +574,7 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
                       className="px-3 py-1 text-sm rounded-md text-white bg-[#13BBAF] hover:bg-teal-600"
                     >
                       Map Columns
-Â                    </button>
+                    </button>
                   )}
                   {file.type === 'text' && <span className="text-sm text-green-400">Ready to Analyse</span>}
                 </div>
@@ -611,7 +608,7 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
             <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-t           </svg>
+            </svg>
             <span>Preparing Data Set...</span>
           </div>
         </div>
@@ -665,7 +662,10 @@ const ThematicAnalysisDisplay = ({ themes = [] }) => {
               <span className="text-sm font-medium text-gray-300">{t.theme}</span>
             </div>
             <div className="w-full bg-gray-700 rounded-full h-4">
-              <div className="bg-green-500 h-4 rounded-full" style={{ width: `${Math.min((t.prominence || 0) * 10, 100)}%` }}></div>
+              <div 
+                    className="bg-green-500 h-4 rounded-full" 
+                    style={{ width: `${Math.min((t.prominence || 0) * 100, 100)}%` }} // <-- FIX 5
+                  ></div>
             </div>
           </div>
         ))}
@@ -712,7 +712,7 @@ const ThematicAnalysisDisplay = ({ themes = [] }) => {
                   )}
                   {hasBarriers && (
                     <div>
-                    D <div className="text-gray-300 text-sm font-semibold mb-1">Barriers / frictions</div>
+                      <div className="text-gray-300 text-sm font-semibold mb-1">Barriers / frictions</div>
                       <div className="flex flex-wrap">
                         {t.barriers.slice(0, 6).map((b, i) => <Pill key={i}>{b}</Pill>)}
                       </div>
@@ -749,7 +749,7 @@ const ThematicAnalysisDisplay = ({ themes = [] }) => {
                       </blockquote>
                     ))}
                   </div>
-s               </div>
+                </div>
               )}
             </li>
           );
@@ -760,9 +760,7 @@ s               </div>
 };
 
 const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
-  // FIX: Create a ref for the component to be downloaded
-  const reportRef = useRef(null);
-
+  const reportRef = useRef(null); // <-- FIX 3
   const {
     narrativeOverview, themes = [],
     sentiment, sentimentDistribution,
@@ -821,9 +819,9 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
           <div className="w-20 h-20 bg-[#3C4142] rounded-full"></div>
         </div>
         <div className="flex justify-center space-x-4 mt-4 text-sm">
-          <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-red-500 mr-2"></span>Negative ({negative}%)</div>
-          <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-lime-500 mr-2"></span>Positive ({positive}%)</div>
-          <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-[#95A3A6] mr-2"></span>Neutral ({neutral}%)</div>
+          <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-red-500 mr-2"></span>Negative ({negative.toFixed(1)}%)</div>
+          <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-lime-500 mr-2"></span>Positive ({positive.toFixed(1)}%)</div>
+          <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-[#95A3A6] mr-2"></span>Neutral ({neutral.toFixed(1)}%)</div>
         </div>
       </div>
     );
@@ -831,6 +829,14 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
 
   const SentimentSection = ({ sentiment, distribution }) => {
     if (!sentiment || !distribution) return null;
+
+    // <-- FIX 4: Convert float (0-1) values to percentages (0-100)
+    const percentDistribution = {
+        positive: (distribution.positive || 0) * 100,
+        negative: (distribution.negative || 0) * 100,
+        neutral: (distribution.neutral || 0) * 100,
+    };
+
     const sentimentStyles = {
       Positive: { bgColor: 'bg-green-900/50', textColor: 'text-green-300', borderColor: 'border-green-500/30', emoji: '😊', label: 'Positive' },
       Negative: { bgColor: 'bg-red-900/50', textColor: 'text-red-300', borderColor: 'border-red-500/30', emoji: '😞', label: 'Negative' },
@@ -847,7 +853,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
               <span className={`text-3xl font-bold ${styles.textColor}`}>{styles.label}</span>
             </div>
           </div>
-          <SentimentDonutChart distribution={distribution} />
+          <SentimentDonutChart distribution={percentDistribution} /> {/* <-- FIX 4 */}
         </div>
       </div>
     );
@@ -926,7 +932,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
                             </div>
                           </>
                         )}
-A                     </div>
+                      </div>
                     </div>
                   ))}
                   {fileResult.categories.map(cat => (<CategoryChart key={cat.title} category={cat} />))}
@@ -940,8 +946,7 @@ A                     </div>
   };
 
   return (
-    // FIX: Added the ref to the main report div
-    <div ref={reportRef} className="w-full bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6">
+    <div ref={reportRef} className="w-full bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6"> {/* <-- FIX 3 */}
       <div className="flex justify-between items-center mb-6">
         <button onClick={onBack} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 border border-gray-600">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -950,8 +955,7 @@ A                     </div>
           Back to Data Set
         </button>
         <h2 className="text-2xl font-semibold text-white">Analysis Report</h2>
-        {/* FIX: Pass the reportRef to the onDownload function */}
-        <button onClick={() => onDownload(reportRef)} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-green-600 hover:bg-green-700">
+        <button onClick={() => onDownload(reportRef)} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-green-600 hover:bg-green-700"> {/* <-- FIX 3 */}
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
@@ -1008,7 +1012,7 @@ const CategoryChart = ({ category }) => {
             <tbody>
               {category.data.map((item) => (
                 <tr key={item.name} className="border-b border-gray-700">
-        _         <td className="px-4 py-2">{item.name}</td>
+                  <td className="px-4 py-2">{item.name}</td>
                   <td className="px-4 py-2">{item.count}</td>
                   <td className="px-4 py-2">{((item.count / total) * 100).toFixed(1)}%</td>
                 </tr>
@@ -1035,10 +1039,10 @@ const CategoryChart = ({ category }) => {
             <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-4 text-sm">
               {category.data.map((item, index) => (
                 <div key={item.name} className="flex items-center">
-                  <span className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: colors[index % colors.length] }}></span>
+Â                  <span className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: colors[index % colors.length] }}></span>
                   {item.name} ({item.count})
                 </div>
-  t             ))}
+              ))}
             </div>
           </div>
         );
@@ -1049,7 +1053,7 @@ const CategoryChart = ({ category }) => {
   return (
     <div>
       <div className="flex justify-between items-center">
-Â        <h5 className="font-semibold text-gray-300">{category.title}</h5>
+        <h5 className="font-semibold text-gray-300">{category.title}</h5>
         <div className="flex space-x-1 bg-gray-700 p-1 rounded-md">
           <button onClick={() => setChartType('donut')} className={`px-2 py-1 text-xs rounded ${chartType === 'donut' ? 'bg-teal-500 text-white' : 'text-gray-400'}`}>Donut</button>
           <button onClick={() => setChartType('bar')} className={`px-2 py-1 text-xs rounded ${chartType === 'bar' ? 'bg-teal-500 text-white' : 'text-gray-400'}`}>Bar</button>
@@ -1083,7 +1087,7 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
           const savedDS = Array.isArray(report.dataSet) ? report.dataSet : [];
           setDataSet(savedDS);
           setWorkflowStep('report');
-s         } else {
+        } else {
           setError('Saved project has no analysis_report.');
         }
       } catch (e) {
@@ -1150,8 +1154,7 @@ s         } else {
           });
         } else {
           const created = await createProject({
-            // FIX: Use researchQuestion for the name, matching the argument 'name'
-            name: researchQuestion?.slice(0, 60) || `Project ${new Date().toLocaleString()}`,
+            name: researchQuestion?.slice(0, 60) || `Project ${new Date().toLocaleString()}`, // <-- FIX 1
             analysis_report: {
               ...results,
               dataSet: dataSet.map(f => ({ name: f.name, type: f.type }))
@@ -1161,7 +1164,6 @@ s         } else {
         }
       } catch (persistErr) {
         console.error('Project save failed:', persistErr);
-        // TODO: You should show this error to the user
         // Non-fatal: report still shows
       }
     } catch (error) {
@@ -1175,29 +1177,26 @@ s         } else {
 
   const handleBackToUpload = () => { setWorkflowStep('upload'); setAnalysisResults(null); setDataSet([]); };
   const handleBackToConfig = () => { setWorkflowStep('configure'); setAnalysisResults(null); };
-
-  // FIX: Implemented the download functionality
-  const handleDownloadReport = (reportRef) => {
+  
+  const handleDownloadReport = (reportRef) => { // <-- FIX 3
     if (!reportRef.current) {
       console.error("Report element not found");
       return;
     }
 
     html2canvas(reportRef.current, {
-      scale: 2, // Improves resolution
-      backgroundColor: '#111827', // Use a bg color similar to your app
+      scale: 2, 
+      backgroundColor: '#030712', // A dark color close to your bg
       useCORS: true,
       onclone: (document) => {
-        // Ensure the background is set on the body for the canvas
-        document.body.style.backgroundColor = '#111827';
+        // Ensure the clone's body has the dark background
+        document.body.style.backgroundColor = '#030712';
       }
     }).then((canvas) => {
       const imgData = canvas.toDataURL('image/png');
-      
-      // Calculate dimensions for PDF
       const pdfWidth = canvas.width;
       const pdfHeight = canvas.height;
-
+      
       const pdf = new jsPDF({
         orientation: pdfWidth > pdfHeight ? 'landscape' : 'portrait',
         unit: 'px',
@@ -1233,16 +1232,16 @@ s         } else {
       return (
         <AnalysisReportPage
           dataSet={dataSet}
-I         results={analysisResults}
+          results={analysisResults}
           onBack={handleBackToConfig}
-          onDownload={handleDownloadReport} // FIX: Pass the implemented function
+          onDownload={handleDownloadReport} // <-- FIX 3
         />
       );
     case 'upload':
     default:
       return (
         <FileUploadPage
-    A       dataSet={dataSet}
+          dataSet={dataSet}
           setDataSet={setDataSet}
           onNext={handleNextStep}
           onDashboardNavigate={() => onNavigate('dashboard')}
@@ -1253,7 +1252,7 @@ I         results={analysisResults}
 
 /* ---------------- App (router/shell) ---------------- */
 export default function App() {
-S   const [user, setUser] = useState(null);
+  const [user, setUser] = useState(null);
   const [page, setPage] = useState('home'); // 'home' | 'login' | 'dashboard' | 'app'
   const [openingProjectId, setOpeningProjectId] = useState(null); // if user opens saved project
   const [currentProjectId, setCurrentProjectId] = useState(null);  // last saved/created project id
@@ -1271,13 +1270,13 @@ S   const [user, setUser] = useState(null);
 
   const handleLogin = (loggedInUser) => {
     setUser(loggedInUser);
-    setPage('dashboard');
+  We're setPage('dashboard');
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
-setPage('home');
+    setPage('home');
     setOpeningProjectId(null);
     setCurrentProjectId(null);
   };
@@ -1308,7 +1307,7 @@ setPage('home');
         {user ? (
           page === 'app' ? (
             <AnalysisToolPage
-Â              onNavigate={handleNavigate}
+      s       onNavigate={handleNavigate}
               initialProjectId={openingProjectId}
               onSavedProjectId={(id) => setCurrentProjectId(id)}
             />
@@ -1320,7 +1319,7 @@ setPage('home');
             />
           )
         ) : (
-s         page === 'login' ? (
+          page === 'login' ? (
             <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />
           ) : (
             <HomePage onNavigate={handleNavigate} />
