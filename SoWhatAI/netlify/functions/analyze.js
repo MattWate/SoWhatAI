@@ -49,11 +49,26 @@ exports.handler = async (event) => {
     const instructionText =
       instructions.length > 0 ? `\nInstructions:\n- ${instructions.join('\n- ')}` : '';
 
+    // --- Add conditional prompt instructions ---
+    const sentimentPrompt = reportConfig?.components?.sentiment
+      ? `\n- sentiment: The overall sentiment of the text ('Positive', 'Negative', 'Neutral').\n` +
+        `- sentimentDistribution: An object with { positive: number, negative: number, neutral: number } as 0-1 decimals (e.g., 0.7, 0.2, 0.1).`
+      : '';
+
+    const soWhatPrompt = reportConfig?.components?.soWhat
+      ? `\n- soWhatActions: 3-5 actionable bullet-point recommendations based on the analysis.`
+      : '';
+
     // --- Thematic analysis with required interpretation & tight quote policy ---
     const prompt =
-      `You are a senior insights analyst. Identify themes AND produce interpretation for each theme.\n\n` +
+      `You are a senior insights analyst. Return a valid JSON object with the following top-level fields:\n` +
+      `- narrativeOverview: A summary of the key findings.\n` +
+      `- themes: An array of themes.\n` +
+      `${sentimentPrompt}\n` +  // <-- ADDED
+      `${soWhatPrompt}\n\n` +  // <-- ADDED
       `For EACH theme, you MUST return:\n` +
       `- theme: concise name (title case)\n` +
+      `- prominence: a number from 0 to 1 representing the theme's importance or frequency (e.g., 0.85)\n` + // <-- ADDED
       `- themeNarrative: 3–6 sentences that interpret the evidence (what it means, why it matters, implications)\n` +
       `- drivers: 2–4 short bullets (motivators/causes)\n` +
       `- barriers: 2–4 short bullets (frictions/constraints)\n` +
