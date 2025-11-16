@@ -7,7 +7,8 @@ exports.handler = async (event) => {
   try {
     const body = JSON.parse(event.body || '{}');
     const {
-      textData,
+      textData, // <-- Kept for fallback
+      textSources, // === STEP 2: Receive new structure ===
       quantitativeData,
       researchQuestion,
       reportConfig = { components: {} }
@@ -58,14 +59,39 @@ exports.handler = async (event) => {
       ? `\n- soWhatActions: 3-5 actionable bullet-point recommendations based on the analysis.`
       : '';
 
-    // --- Thematic analysis with required interpretation & tight quote policy ---
+    // === STEP 2: Build categorized data string for prompt ===
+    let dataForPrompt = '';
+    if (Array.isArray(textSources)) {
+      const sourcesByCategory = {};
+      textSources.forEach(source => {
+        const category = source.category || 'general';
+        if (!sourcesByCategory[category]) {
+          sourcesByCategory[category] = [];
+        }
+        sourcesByCategory[category].push(`---\n[File: ${source.fileName}]\n${source.content}\n---`);
+      });
+
+      for (const category in sourcesByCategory) {
+        const categoryName = category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()); // e.g., "Usability Test"
+        dataForPrompt += `\n\n====================\nData from: ${categoryName}\n====================\n`;
+        dataForPrompt += sourcesByCategory[category].join('\n');
+      }
+    } else if (textData) { // Fallback for old requests
+      dataForPrompt = textData;
+    }
+    // === END STEP 2 ===
+
+    // === STEP 2: Update prompt for new structure ===
     const prompt =
       `You are a senior insights analyst. Return a valid JSON object with the following top-level fields:\n` +
-      `- narrativeOverview: A summary of the key findings.\n` +
-      `- themes: An array of themes.\n` +
+      `- narrativeOverview: A high-level summary of all findings.\n` +
+      `- analysisBySource: An array where each object represents an analysis for a specific data type (e.g., 'interview', 'survey').\n` +
       `${sentimentPrompt}\n` +
       `${soWhatPrompt}\n\n` +
-      `For EACH theme, you MUST return:\n` +
+      `For EACH object in 'analysisBySource', you MUST return:\n` +
+      `- sourceType: The category of the data (e.g., 'interview', 'survey', 'usability_test', 'general').\n` +
+      `- themes: An array of themes found *for that source type*.\n\n` +
+      `For EACH theme in the 'themes' array, you MUST return:\n` +
       `- theme: concise name (title case)\n` +
       `- prominence: a number from 0 to 1 representing the theme's importance or frequency (e.g., 0.85)\n` +
       `- themeNarrative: 3–6 sentences that interpret the evidence (what it means, why it matters, implications)\n` +
@@ -82,34 +108,50 @@ exports.handler = async (event) => {
       `Return ONLY valid JSON conforming to the schema.\n` +
       `${instructionText}\n\n` +
       `Research Question: "${researchQuestion || ''}"\n\n` +
-      `Data:\n"""\n${textData || ''}\n"""\n`;
+      `Data:\n"""\n${dataForPrompt || ''}\n"""\n`;
+    // === END STEP 2 ===
 
-    // ---- Dynamic response schema ----
+    // === STEP 2: Define theme schema once for re-use ===
+    const themeProperties = {
+      type: "OBJECT",
+      properties: {
+        theme: { type: "STRING" },
+        themeNarrative: { type: "STRING" },
+        drivers: { type: "ARRAY", items: { type: "STRING" } },
+        barriers: { type: "ARRAY", items: { type: "STRING" } },
+        tensions: { type: "ARRAY", items: { type: "STRING" } },
+        opportunities: { type: "ARRAY", items: { type: "STRING" } },
+        confidence: { type: "NUMBER" },
+        evidence: { type: "ARRAY", items: { type: "STRING" } },
+        emoji: { type: "STRING" },
+        prominence: { type: "NUMBER" }
+      },
+      required: ["theme", "themeNarrative"]
+    };
+    // === END STEP 2 ===
+
+    // === STEP 2: Update response schema for new structure ===
     const properties = {
       narrativeOverview: { type: "STRING" },
-      themes: {
+      analysisBySource: {
         type: "ARRAY",
         items: {
           type: "OBJECT",
           properties: {
-            theme: { type: "STRING" },
-            themeNarrative: { type: "STRING" },
-            drivers: { type: "ARRAY", items: { type: "STRING" } },
-            barriers: { type: "ARRAY", items: { type: "STRING" } },
-            tensions: { type: "ARRAY", items: { type: "STRING" } },
-            opportunities: { type: "ARRAY", items: { type: "STRING" } },
-            confidence: { type: "NUMBER" },
-            evidence: { type: "ARRAY", items: { type: "STRING" } },
-            emoji: { type: "STRING" },
-            prominence: { type: "NUMBER" }
+            sourceType: { type: "STRING" },
+            themes: {
+              type: "ARRAY",
+              items: themeProperties // Re-use theme schema
+            }
           },
-          required: ["theme", "themeNarrative"]
+          required: ["sourceType", "themes"]
         }
       }
     };
+    // === END STEP 2 ===
 
-    // === BUG FIX: Dynamically build the 'required' array ===
-    const requiredFields = ["narrativeOverview", "themes"];
+    // === BUG FIX (from previous step): Dynamically build the 'required' array ===
+    const requiredFields = ["narrativeOverview", "analysisBySource"]; // <-- Updated to 'analysisBySource'
 
     if (reportConfig?.components?.sentiment) {
       properties.sentimentDistribution = {
@@ -214,28 +256,35 @@ exports.handler = async (event) => {
     }
     function wordCount(s = '') { return (s.trim().match(/\S+/g) || []).length; }
 
-    if (Array.isArray(aiJson?.themes)) {
-      aiJson.themes = aiJson.themes.map((t) => {
-        const narrative = (t.themeNarrative || t.whyItMatters || '').trim();
+    // === STEP 2: Update post-processing for new structure ===
+    if (Array.isArray(aiJson?.analysisBySource)) {
+      aiJson.analysisBySource.forEach(sourceAnalysis => {
+        if (Array.isArray(sourceAnalysis?.themes)) {
+          sourceAnalysis.themes = sourceAnalysis.themes.map((t) => {
+            const narrative = (t.themeNarrative || t.whyItMatters || '').trim();
 
-        let quotes = Array.isArray(t.evidence) ? dedupeCaseInsensitive(t.evidence) : [];
-        quotes = quotes
-          .map(q => String(q || '').replace(/\s+/g, ' ').trim())
-          .filter(q => wordCount(q) >= 8 && wordCount(q) <= 30)
-          .slice(0, 3);
+            let quotes = Array.isArray(t.evidence) ? dedupeCaseInsensitive(t.evidence) : [];
+            quotes = quotes
+              .map(q => String(q || '').replace(/\s+/g, ' ').trim())
+              .filter(q => wordCount(q) >= 8 && wordCount(q) <= 30)
+              .slice(0, 3);
 
-        const asArray = (x) => Array.isArray(x) ? x : [];
-        return {
-          ...t,
-          themeNarrative: narrative,
-          evidence: quotes,
-          drivers: asArray(t.drivers).slice(0, 6),
-          barriers: asArray(t.barriers).slice(0, 6),
-          tensions: asArray(t.tensions).slice(0, 4),
-          opportunities: asArray(t.opportunities).slice(0, 6)
-        };
+            const asArray = (x) => Array.isArray(x) ? x : [];
+            return {
+              ...t,
+              themeNarrative: narrative,
+              evidence: quotes,
+              drivers: asArray(t.drivers).slice(0, 6),
+              barriers: asArray(t.barriers).slice(0, 6),
+              tensions: asArray(t.tensions).slice(0, 4),
+              opportunities: asArray(t.opportunities).slice(0, 6)
+            };
+          });
+        }
       });
     }
+    // === END STEP 2 ===
+
 
     // ---- Quantitative aggregation (unchanged) ----
     let quantitativeResults = [];
