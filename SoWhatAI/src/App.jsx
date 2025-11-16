@@ -21,7 +21,7 @@ async function listProjects() {
 }
 
 async function getProject(id) {
-  const { data, error } = await supabase
+  const { data, error } } = await supabase
     .from('projects')
     .select('id, project_name, created_at, analysis_report')
     .eq('id', id)
@@ -711,7 +711,6 @@ const ThematicAnalysisDisplay = ({ themes = [] }) => {
                 </div>
               )}
               
-              {/* === STEP 3: Render Quantitative Evidence === */}
               {t.quantitativeEvidence && (
                 <div className="mt-2 mb-2">
                   <span className="inline-flex items-center bg-teal-900/70 text-teal-200 text-xs px-3 py-1 rounded-full border border-teal-700">
@@ -722,7 +721,6 @@ const ThematicAnalysisDisplay = ({ themes = [] }) => {
                   </span>
                 </div>
               )}
-              {/* === END STEP 3 === */}
 
               {(hasDrivers || hasBarriers) && (
                 <div className="grid md:grid-cols-2 gap-3 mt-2">
@@ -783,7 +781,7 @@ const ThematicAnalysisDisplay = ({ themes = [] }) => {
   );
 };
 
-// === STEP 4: New ReportSidebar Component ===
+/* === STEP 4: New ReportSidebar Component === */
 const ReportSidebar = ({ results }) => {
   const {
     narrativeOverview, themes = [], analysisBySource = [],
@@ -797,7 +795,8 @@ const ReportSidebar = ({ results }) => {
   };
 
   return (
-    <nav className="sticky top-24 self-start"> {/* Use sticky positioning */}
+    // === FIX: Removed sticky classes from nav ===
+    <nav className="self-start">
       <h3 className="text-sm font-semibold uppercase text-gray-500 tracking-wider mb-3">
         On this page
       </h3>
@@ -867,7 +866,7 @@ const ReportSidebar = ({ results }) => {
     </nav>
   );
 };
-// === END STEP 4 ===
+/* === END STEP 4 === */
 
 
 const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
@@ -950,7 +949,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
     };
 
     const { positive, negative, neutral } = percentDistribution;
-    let dominantSentiment = 'Neutral'; // Default
+    let dominantSentiment = 'Neutral';
     if (positive > negative && positive > neutral) {
       dominantSentiment = 'Positive';
     } else if (negative > positive && negative > neutral) {
@@ -966,7 +965,6 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
     const styles = sentimentStyles[dominantSentiment] || sentimentStyles['Neutral'];
     
     return (
-      // === STEP 4: Added section ID ===
       <div id="report-sentiment" className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm scroll-mt-24">
         <h3 className="text-lg font-semibold text-white mb-4 text-center">Overall Sentiment</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
@@ -986,7 +984,6 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
   };
 
   const NarrativeOverviewDisplay = ({ narrative }) => (
-    // === STEP 4: Added section ID ===
     <div id="report-overview" className="p-5 rounded-lg border border-purple-500/20 bg-purple-900/20 backdrop-blur-sm scroll-mt-24">
       <h3 className="text-xl font-semibold text-white mb-2">Overview</h3>
       <p className="text-gray-300 leading-relaxed text-base">{narrative}</p>
@@ -995,7 +992,6 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
 
   const SoWhatDisplay = ({ actions }) =>
     actions && actions.length > 0 && (
-      // === STEP 4: Added section ID ===
       <div id="report-sowhat" className="p-5 rounded-lg border border-teal-500/20 bg-teal-900/20 backdrop-blur-sm scroll-mt-24">
         <h3 className="text-xl font-semibold text-white mb-3">So What? (Actions & Recommendations)</h3>
         <ul className="list-disc list-inside space-y-2 text-gray-300">
@@ -1006,7 +1002,6 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
 
   const VerbatimQuotesDisplay = ({ quotes }) =>
     quotes && quotes.length > 0 && (
-      // === STEP 4: Added section ID ===
       <div id="report-quotes" className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm scroll-mt-24">
         <h3 className="text-lg font-semibold text-white mb-3">Key Verbatim Quotes</h3>
         <ul className="space-y-4">
@@ -1026,7 +1021,6 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
     const [isOpen, setIsOpen] = useState(true);
     if (!quantData || quantData.length === 0) return null;
     return (
-      // === STEP 4: Added section ID ===
       <div id="report-quantitative" className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm scroll-mt-24">
         <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center">
           <h3 className="text-lg font-semibold text-white">Quantitative Analysis</h3>
@@ -1081,11 +1075,12 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
   };
 
   return (
-    // === STEP 4: Added two-column grid layout ===
+    /* === STEP 4: Changed layout to grid === */
     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
       
       {/* --- Sidebar (Column 1) --- */}
-      <div className="md:col-span-1">
+      {/* === FIX: Added sticky classes to the column div === */}
+      <div className="md:col-span-1 sticky top-24 self-start">
         <ReportSidebar results={results} />
       </div>
 
@@ -1108,6 +1103,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
             </button>
           </div>
 
+          {/* === STEP 4: Added IDs to all sections for sidebar navigation === */}
           <div className="space-y-6">
             <DataSetOverview dataSet={dataSet} />
             <ResearchQuestionDisplay question={researchQuestion} />
@@ -1119,7 +1115,6 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
             
             {/* Render old structure if it exists (for old reports) */}
             {themes && themes.length > 0 && (
-              // === STEP 4: Added section ID ===
               <div id="report-themes-legacy" className="scroll-mt-24">
                 <ThematicAnalysisDisplay themes={themes} />
               </div>
@@ -1129,7 +1124,6 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
             {analysisBySource && analysisBySource.length > 0 && (
               <div className="space-y-6">
                 {analysisBySource.map((sourceAnalysis, index) => (
-                  // === STEP 4: Added section ID ===
                   <div key={index} id={`report-findings-${sourceAnalysis.sourceType}`} className="scroll-mt-24">
                     <h2 className="text-2xl font-semibold text-white mb-4 border-b border-gray-700 pb-2 capitalize">
                       Findings from: {formatSourceType(sourceAnalysis.sourceType)}
@@ -1143,12 +1137,12 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
             <VerbatimQuotesDisplay quotes={verbatimQuotes} />
             <QuantitativeAnalysisDisplay quantData={quantitativeResults} />
           </div>
+          {/* === END STEP 4 === */}
         </div>
       </div>
     </div>
   );
 };
-// === END STEP 4 ===
 
 
 /* ---------------- Category Chart ---------------- */
@@ -1244,6 +1238,16 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
   const [analysisResults, setAnalysisResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  
+  // === STEP 5: Need currentProjectId in this scope ===
+  const [currentProjectId, setCurrentProjectId] = useState(null);
+  
+  useEffect(() => {
+    if (initialProjectId) {
+      setCurrentProjectId(initialProjectId);
+    }
+  }, [initialProjectId]);
+  // === END STEP 5 ===
 
   useEffect(() => {
     (async () => {
@@ -1355,6 +1359,8 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
               dataSet: dataSetForSaving
             }
           });
+          // === STEP 5: Update state ===
+          setCurrentProjectId(created.id);
           onSavedProjectId?.(created.id);
         }
       } catch (persistErr) {
@@ -1446,6 +1452,10 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
           results={analysisResults}
           onBack={handleBackToConfig}
           onDownload={handleDownloadReport}
+          // === STEP 5: Pass state setters down ===
+          onUpdateResults={setAnalysisResults}
+          projectId={currentProjectId}
+          // === END STEP 5 ===
         />
       );
     case 'upload':
@@ -1464,9 +1474,11 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
 /* ---------------- App (router/shell) ---------------- */
 export default function App() {
   const [user, setUser] = useState(null);
-  const [page, setPage] = useState('home'); // 'home' | 'login' | 'dashboard' | 'app'
+  const [page, setPage] = useState('home');
   const [openingProjectId, setOpeningProjectId] = useState(null);
-  const [currentProjectId, setCurrentProjectId] = useState(null);
+  
+  // === STEP 5: Remove this state, it's now managed in AnalysisToolPage ===
+  // const [currentProjectId, setCurrentProjectId] = useState(null);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -1489,10 +1501,14 @@ export default function App() {
     setUser(null);
     setPage('home');
     setOpeningProjectId(null);
-    setCurrentProjectId(null);
+    // setCurrentProjectId(null); // <-- Removed in Step 5
   };
 
   const handleNavigate = (destination) => {
+    if (destination === 'app') {
+      setOpeningProjectId(null); // Clear any open project when navigating to "new project"
+    }
+    
     if (!user && (destination === 'app' || destination === 'dashboard')) {
       setPage('login');
     } else {
@@ -1502,7 +1518,7 @@ export default function App() {
 
   const handleOpenProject = async (projectId) => {
     setOpeningProjectId(projectId);
-    setCurrentProjectId(projectId);
+    // setCurrentProjectId(projectId); // <-- Removed in Step 5
     setPage('app');
   };
 
@@ -1520,7 +1536,8 @@ export default function App() {
             <AnalysisToolPage
               onNavigate={handleNavigate}
               initialProjectId={openingProjectId}
-              onSavedProjectId={(id) => setCurrentProjectId(id)}
+              // === STEP 5: This prop is no longer needed here ===
+              // onSavedProjectId={(id) => setCurrentProjectId(id)}
             />
           ) : (
             <DashboardPage
