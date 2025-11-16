@@ -35,8 +35,8 @@ async function createProject({ name, analysis_report }) {
   if (!user) throw new Error('Not signed in');
   const { data, error } = await supabase
     .from('projects')
-    .insert({ user_id: user.id, project_name: name, analysis_report }) // <-- FIX 1
-    .select('id, project_name, created_at') // <-- FIX 1
+    .insert({ user_id: user.id, project_name: name, analysis_report })
+    .select('id, project_name, created_at')
     .single();
   if (error) throw error;
   return data;
@@ -56,12 +56,10 @@ async function updateProject({ id, patch }) {
 /* =========================================================
   Netlify analyze function abstraction
   ========================================================= */
-// === STEP 2: Updated function signature ===
 async function callAnalyze({ textSources, quantitativeData, researchQuestion, reportConfig }) {
   const res = await fetch('/.netlify/functions/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    // === STEP 2: Send `textSources` instead of `textData` ===
     body: JSON.stringify({ textSources, quantitativeData, researchQuestion, reportConfig })
   });
   if (!res.ok) {
@@ -268,7 +266,7 @@ const DashboardPage = ({ user, onNavigate, onOpenProject }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {projects.map(p => (
               <div key={p.id} className="p-4 bg-gray-800/60 border border-gray-700 rounded-lg">
-                <div className="text-white font-semibold">{p.project_name || 'Untitled Project'}</div> {/* <-- FIX 2 */}
+                <div className="text-white font-semibold">{p.project_name || 'Untitled Project'}</div>
                 <div className="text-gray-500 text-sm">{new Date(p.created_at).toLocaleString()}</div>
                 <div className="mt-3 flex gap-2">
                   <button
@@ -298,7 +296,6 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) =>
     const filePromises = Array.from(files).map(file => {
       return new Promise((resolve) => {
         const fileId = Date.now() + file.name;
-        // === STEP 2: Add default category ===
         if (/\.txt$/i.test(file.name)) {
           const reader = new FileReader();
           reader.onload = (e) => resolve({ id: fileId, name: file.name, type: 'text', content: e.target.result, category: 'general' });
@@ -318,7 +315,6 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) =>
         } else {
           resolve(null);
         }
-        // === END STEP 2 ===
       });
     });
 
@@ -363,7 +359,7 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) =>
           onClick={() => fileInputRef.current.click()}
           className="inline-flex items-center px-4 py-2 text-sm rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 border border-gray-600"
         >
-          <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
           Add File(s)
@@ -373,7 +369,6 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) =>
       <div>
         <h3 className="font-semibold text-lg text-white">Files in Your Data Set:</h3>
         <div className="mt-2 space-y-2">
-          {/* === STEP 2: Added category dropdown === */}
           {dataSet.map((file) => (
             <div key={file.id} className="flex items-center justify-between p-2 bg-gray-800/70 rounded-md space-x-4">
               <span className="text-gray-300 truncate flex-1">{file.name}</span>
@@ -393,7 +388,6 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) =>
               </select>
             </div>
           ))}
-          {/* === END STEP 2 === */}
           {dataSet.length === 0 && <p className="text-gray-500">No files uploaded.</p>}
         </div>
       </div>
@@ -476,7 +470,7 @@ const MappingModal = ({ file, onClose, onSave }) => {
         <h3 className="text-lg font-semibold">Map Columns for: {file.name}</h3>
         {isLoading ? (
           <div className="flex items-center justify-center p-8">
-            <svg className="animate-spin h-5 w-5 text-white" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
@@ -625,7 +619,7 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
       ) : (
         <div className="text-center text-gray-400 p-8 bg-gray-800/50 rounded-md">
           <div className="flex justify-center items-center">
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
@@ -661,7 +655,6 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
 const ThematicAnalysisDisplay = ({ themes = [] }) => {
   if (!themes || themes.length === 0) return null;
 
-  // Cap quotes to 3 and show narrative first; hide empty sections
   const Pill = ({ children }) => (
     <span className="inline-block bg-gray-800/70 text-gray-200 text-xs px-2 py-1 rounded-md mr-2 mb-2 border border-gray-700">
       {children}
@@ -672,7 +665,6 @@ const ThematicAnalysisDisplay = ({ themes = [] }) => {
     <div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm">
       <h3 className="text-lg font-semibold text-white mb-3">Thematic Analysis</h3>
 
-      {/* Prominence bars */}
       <div className="space-y-4 mb-6">
         <h4 className="font-semibold text-gray-300">Theme Prominence</h4>
         {themes.map((t, idx) => (
@@ -684,7 +676,6 @@ const ThematicAnalysisDisplay = ({ themes = [] }) => {
             <div className="w-full bg-gray-700 rounded-full h-4">
               <div
                 className="bg-green-500 h-4 rounded-full"
-                // === STEP 3: FIX: Use || 0 to prevent NaN width ===
                 style={{ width: `${Math.min((t.prominence || 0) * 100, 100)}%` }}
               ></div>
             </div>
@@ -694,7 +685,6 @@ const ThematicAnalysisDisplay = ({ themes = [] }) => {
 
       <hr className="my-6 border-gray-700" />
 
-      {/* Per-theme cards with narrative first */}
       <ul className="space-y-6">
         {themes.map((t, idx) => {
           const quotes = Array.isArray(t.evidence) ? t.evidence.filter(Boolean).slice(0, 3) : [];
@@ -725,7 +715,7 @@ const ThematicAnalysisDisplay = ({ themes = [] }) => {
               {t.quantitativeEvidence && (
                 <div className="mt-2 mb-2">
                   <span className="inline-flex items-center bg-teal-900/70 text-teal-200 text-xs px-3 py-1 rounded-full border border-teal-700">
-                    <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
                     </svg>
                     {t.quantitativeEvidence}
@@ -793,12 +783,99 @@ const ThematicAnalysisDisplay = ({ themes = [] }) => {
   );
 };
 
+// === STEP 4: New ReportSidebar Component ===
+const ReportSidebar = ({ results }) => {
+  const {
+    narrativeOverview, themes = [], analysisBySource = [],
+    sentimentDistribution, verbatimQuotes, quantitativeResults,
+    soWhatActions
+  } = results;
+
+  // Helper to capitalize and format source types
+  const formatSourceType = (type) => {
+    return (type || 'general').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  return (
+    <nav className="sticky top-24 self-start"> {/* Use sticky positioning */}
+      <h3 className="text-sm font-semibold uppercase text-gray-500 tracking-wider mb-3">
+        On this page
+      </h3>
+      <ul className="space-y-2">
+        {narrativeOverview && (
+          <li>
+            <a href="#report-overview" className="text-gray-400 hover:text-white transition-colors">
+              Overview
+            </a>
+          </li>
+        )}
+        {soWhatActions && soWhatActions.length > 0 && (
+          <li>
+            <a href="#report-sowhat" className="text-gray-400 hover:text-white transition-colors">
+              So What?
+            </a>
+          </li>
+        )}
+        {sentimentDistribution && (
+          <li>
+            <a href="#report-sentiment" className="text-gray-400 hover:text-white transition-colors">
+              Sentiment
+            </a>
+          </li>
+        )}
+        
+        {/* Backward compatibility for old reports */}
+        {themes && themes.length > 0 && (
+          <li>
+            <a href="#report-themes-legacy" className="text-gray-400 hover:text-white transition-colors">
+              Thematic Analysis
+            </a>
+          </li>
+        )}
+
+        {/* New method-aware links */}
+        {analysisBySource && analysisBySource.length > 0 && (
+          <ul className="pl-3 space-y-2 border-l border-gray-700">
+            {analysisBySource.map((source, index) => (
+              <li key={index}>
+                <a
+                  href={`#report-findings-${source.sourceType}`}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  {formatSourceType(source.sourceType)} Findings
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+        
+        {verbatimQuotes && verbatimQuotes.length > 0 && (
+          <li>
+            <a href="#report-quotes" className="text-gray-400 hover:text-white transition-colors">
+              Key Quotes
+            </a>
+          </li>
+        )}
+        {quantitativeResults && quantitativeResults.length > 0 && (
+          <li>
+            <a href="#report-quantitative" className="text-gray-400 hover:text-white transition-colors">
+              Quantitative
+            </a>
+          </li>
+        )}
+      </ul>
+    </nav>
+  );
+};
+// === END STEP 4 ===
+
+
 const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
   const reportRef = useRef(null);
   const {
     narrativeOverview, 
-    themes = [], // === STEP 2: Keep for backward compatibility ===
-    analysisBySource = [], // === STEP 2: Add new structure ===
+    themes = [],
+    analysisBySource = [],
     sentimentDistribution,
     verbatimQuotes, quantitativeResults, researchQuestion, soWhatActions
   } = results;
@@ -813,7 +890,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
         <div className="flex space-x-8">
           {textFilesCount > 0 && (
             <div className="flex items-center">
-              <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               <div>
@@ -824,7 +901,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
           )}
           {spreadsheets.length > 0 && (
             <div className="flex items-center">
-              <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
               <div>
@@ -863,17 +940,15 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
     );
   };
 
-  const SentimentSection = ({ distribution }) => { // `sentiment` prop removed
+  const SentimentSection = ({ distribution }) => {
     if (!distribution) return null;
 
-    // Convert float (0-1) values to percentages (0-100)
     const percentDistribution = {
       positive: (distribution.positive || 0) * 100,
       negative: (distribution.negative || 0) * 100,
       neutral: (distribution.neutral || 0) * 100,
     };
 
-    // === STEP 1 FIX: Calculate dominant sentiment ===
     const { positive, negative, neutral } = percentDistribution;
     let dominantSentiment = 'Neutral'; // Default
     if (positive > negative && positive > neutral) {
@@ -881,7 +956,6 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
     } else if (negative > positive && negative > neutral) {
       dominantSentiment = 'Negative';
     }
-    // === END FIX ===
 
     const sentimentStyles = {
       Positive: { bgColor: 'bg-green-900/50', textColor: 'text-green-300', borderColor: 'border-green-500/30', emoji: '😊', label: 'Positive' },
@@ -889,10 +963,11 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
       Neutral: { bgColor: 'bg-gray-700', textColor: 'text-gray-300', borderColor: 'border-gray-600', emoji: '😐', label: 'Neutral' }
     };
     
-    const styles = sentimentStyles[dominantSentiment] || sentimentStyles['Neutral']; // Use calculated sentiment
+    const styles = sentimentStyles[dominantSentiment] || sentimentStyles['Neutral'];
     
     return (
-      <div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm">
+      // === STEP 4: Added section ID ===
+      <div id="report-sentiment" className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm scroll-mt-24">
         <h3 className="text-lg font-semibold text-white mb-4 text-center">Overall Sentiment</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
           <div className={`p-4 rounded-lg border ${styles.borderColor} ${styles.bgColor}`}>
@@ -903,17 +978,16 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
           </div>
           <SentimentDonutChart distribution={percentDistribution} />
         </div>
-        {/* === STEP 1 FIX: Add trust note === */}
         <p className="text-xs text-gray-500 text-center col-span-1 md:col-span-2 pt-4 mt-4 border-t border-gray-700/50">
           Overall sentiment is estimated by the AI model based on an analysis of all text data. The label is assigned to the highest percentage.
         </p>
-        {/* === END FIX === */}
       </div>
     );
   };
 
   const NarrativeOverviewDisplay = ({ narrative }) => (
-    <div className="p-5 rounded-lg border border-purple-500/20 bg-purple-900/20 backdrop-blur-sm">
+    // === STEP 4: Added section ID ===
+    <div id="report-overview" className="p-5 rounded-lg border border-purple-500/20 bg-purple-900/20 backdrop-blur-sm scroll-mt-24">
       <h3 className="text-xl font-semibold text-white mb-2">Overview</h3>
       <p className="text-gray-300 leading-relaxed text-base">{narrative}</p>
     </div>
@@ -921,7 +995,8 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
 
   const SoWhatDisplay = ({ actions }) =>
     actions && actions.length > 0 && (
-      <div className="p-5 rounded-lg border border-teal-500/20 bg-teal-900/20 backdrop-blur-sm">
+      // === STEP 4: Added section ID ===
+      <div id="report-sowhat" className="p-5 rounded-lg border border-teal-500/20 bg-teal-900/20 backdrop-blur-sm scroll-mt-24">
         <h3 className="text-xl font-semibold text-white mb-3">So What? (Actions & Recommendations)</h3>
         <ul className="list-disc list-inside space-y-2 text-gray-300">
           {actions.map((action, index) => (<li key={index}>{action}</li>))}
@@ -931,7 +1006,8 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
 
   const VerbatimQuotesDisplay = ({ quotes }) =>
     quotes && quotes.length > 0 && (
-      <div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm">
+      // === STEP 4: Added section ID ===
+      <div id="report-quotes" className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm scroll-mt-24">
         <h3 className="text-lg font-semibold text-white mb-3">Key Verbatim Quotes</h3>
         <ul className="space-y-4">
           {quotes.map((quote, index) => (
@@ -950,10 +1026,11 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
     const [isOpen, setIsOpen] = useState(true);
     if (!quantData || quantData.length === 0) return null;
     return (
-      <div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm">
+      // === STEP 4: Added section ID ===
+      <div id="report-quantitative" className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm scroll-mt-24">
         <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center">
           <h3 className="text-lg font-semibold text-white">Quantitative Analysis</h3>
-          <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className={`h-6 w-6 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
@@ -998,60 +1075,81 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
     );
   };
 
+  // Helper to capitalize and format source types
+  const formatSourceType = (type) => {
+    return (type || 'general').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
   return (
-    <div ref={reportRef} id="analysis-report-container" className="w-full bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6">
-      <div className="flex justify-between items-center mb-6">
-        <button onClick={onBack} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 border border-gray-600">
-          <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-          Back to Data Set
-        </button>
-        <h2 className="text-2xl font-semibold text-white">Analysis Report</h2>
-        <button onClick={() => onDownload(reportRef)} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-green-600 hover:bg-green-700">
-          <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-          </svg>
-          Download Report
-        </button>
+    // === STEP 4: Added two-column grid layout ===
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      
+      {/* --- Sidebar (Column 1) --- */}
+      <div className="md:col-span-1">
+        <ReportSidebar results={results} />
       </div>
 
-      <div className="space-y-6">
-        <DataSetOverview dataSet={dataSet} />
-        <ResearchQuestionDisplay question={researchQuestion} />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <NarrativeOverviewDisplay narrative={narrativeOverview} />
-          <SoWhatDisplay actions={soWhatActions} />
-        </div>
-        <SentimentSection distribution={sentimentDistribution} />
-        
-        {/* === STEP 2: Render old AND new theme structures for compatibility === */}
-        {/* Render old structure if it exists (for old reports) */}
-        {themes && themes.length > 0 && (
-          <ThematicAnalysisDisplay themes={themes} />
-        )}
-        
-        {/* Render new "Method-Aware" structure */}
-        {analysisBySource && analysisBySource.length > 0 && (
-          <div className="space-y-6">
-            {analysisBySource.map((sourceAnalysis, index) => (
-              <div key={index}>
-                <h2 className="text-2xl font-semibold text-white mb-4 border-b border-gray-700 pb-2 capitalize">
-                  Findings from: {sourceAnalysis.sourceType.replace(/_/g, ' ')}
-                </h2>
-                <ThematicAnalysisDisplay themes={sourceAnalysis.themes} />
-              </div>
-            ))}
+      {/* --- Main Report Content (Column 2) --- */}
+      <div className="md:col-span-3">
+        <div ref={reportRef} id="analysis-report-container" className="w-full bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6">
+          <div className="flex justify-between items-center mb-6">
+            <button onClick={onBack} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 border border-gray-600">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Back to Data Set
+            </button>
+            <h2 className="text-2xl font-semibold text-white">Analysis Report</h2>
+            <button onClick={() => onDownload(reportRef)} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-green-600 hover:bg-green-700">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Download Report
+            </button>
           </div>
-        )}
-        {/* === END STEP 2 === */}
-        
-        <VerbatimQuotesDisplay quotes={verbatimQuotes} />
-        <QuantitativeAnalysisDisplay quantData={quantitativeResults} />
+
+          <div className="space-y-6">
+            <DataSetOverview dataSet={dataSet} />
+            <ResearchQuestionDisplay question={researchQuestion} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <NarrativeOverviewDisplay narrative={narrativeOverview} />
+              <SoWhatDisplay actions={soWhatActions} />
+            </div>
+            <SentimentSection distribution={sentimentDistribution} />
+            
+            {/* Render old structure if it exists (for old reports) */}
+            {themes && themes.length > 0 && (
+              // === STEP 4: Added section ID ===
+              <div id="report-themes-legacy" className="scroll-mt-24">
+                <ThematicAnalysisDisplay themes={themes} />
+              </div>
+            )}
+            
+            {/* Render new "Method-Aware" structure */}
+            {analysisBySource && analysisBySource.length > 0 && (
+              <div className="space-y-6">
+                {analysisBySource.map((sourceAnalysis, index) => (
+                  // === STEP 4: Added section ID ===
+                  <div key={index} id={`report-findings-${sourceAnalysis.sourceType}`} className="scroll-mt-24">
+                    <h2 className="text-2xl font-semibold text-white mb-4 border-b border-gray-700 pb-2 capitalize">
+                      Findings from: {formatSourceType(sourceAnalysis.sourceType)}
+                    </h2>
+                    <ThematicAnalysisDisplay themes={sourceAnalysis.themes} />
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            <VerbatimQuotesDisplay quotes={verbatimQuotes} />
+            <QuantitativeAnalysisDisplay quantData={quantitativeResults} />
+          </div>
+        </div>
       </div>
     </div>
   );
 };
+// === END STEP 4 ===
+
 
 /* ---------------- Category Chart ---------------- */
 const CategoryChart = ({ category }) => {
@@ -1147,7 +1245,6 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // If opening an existing project, load it immediately and jump to 'report'
   useEffect(() => {
     (async () => {
       if (!initialProjectId) return;
@@ -1158,15 +1255,13 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
         if (report) {
           setAnalysisResults(report);
           
-          // === STEP 2: Make project loading backward compatible ===
           const savedDS = Array.isArray(report.dataSet)
             ? report.dataSet.map(f => ({
                 name: f.name,
                 type: f.type,
-                category: f.category || 'general' // Add default for old reports
+                category: f.category || 'general'
               }))
             : [];
-          // === END STEP 2 ===
             
           setDataSet(savedDS);
           setWorkflowStep('report');
@@ -1187,7 +1282,6 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
     setIsLoading(true);
     setError(null);
     try {
-      // === STEP 2: Build new `textSources` array ===
       const textSources = dataSet
         .filter(f => f.type === 'text')
         .map(f => ({
@@ -1201,19 +1295,17 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
 
       spreadsheets.forEach(sheet => {
         if (sheet.rows && sheet.headers) {
-          // Get text data from spreadsheets
           const textColumns = sheet.headers.filter(header => sheet.mappings[header] === 'text');
           const sheetText = sheet.rows.map(row => textColumns.map(header => row[header]).join(' ')).join('\n');
           
           if (sheetText.trim()) {
             textSources.push({
               fileName: sheet.name,
-              category: sheet.category || 'survey', // Default spreadsheets to 'survey'
+              category: sheet.category || 'survey',
               content: sheetText
             });
           }
 
-          // Get quantitative data from spreadsheets
           sheet.headers.forEach(header => {
             const mapping = sheet.mappings[header];
             if (mapping === 'stats' || mapping === 'category') {
@@ -1227,10 +1319,9 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
           });
         }
       });
-      // === END STEP 2 ===
 
       const results = await callAnalyze({
-        textSources: textSources, // <-- Send new structure
+        textSources: textSources,
         quantitativeData: quantitativePayload,
         researchQuestion,
         reportConfig
@@ -1239,15 +1330,12 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
       setAnalysisResults(results);
       setWorkflowStep('report');
 
-      // === STEP 2: Persist new category data ===
       const dataSetForSaving = dataSet.map(f => ({ 
         name: f.name, 
         type: f.type, 
         category: f.category || 'general' 
       }));
-      // === END STEP 2 ===
 
-      // Persist: create or update
       try {
         if (initialProjectId) {
           await updateProject({
@@ -1255,7 +1343,7 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
             patch: {
               analysis_report: {
                 ...results,
-                dataSet: dataSetForSaving // <-- Use new save object
+                dataSet: dataSetForSaving
               }
             }
           });
@@ -1264,14 +1352,13 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
             name: researchQuestion?.slice(0, 60) || `Project ${new Date().toLocaleString()}`,
             analysis_report: {
               ...results,
-              dataSet: dataSetForSaving // <-- Use new save object
+              dataSet: dataSetForSaving
             }
           });
           onSavedProjectId?.(created.id);
         }
       } catch (persistErr) {
         console.error('Project save failed:', persistErr);
-        // Non-fatal: report still shows
       }
     } catch (error) {
       console.error('Analysis failed:', error);
@@ -1285,7 +1372,6 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
   const handleBackToUpload = () => { setWorkflowStep('upload'); setAnalysisResults(null); setDataSet([]); };
   const handleBackToConfig = () => { setWorkflowStep('configure'); setAnalysisResults(null); };
   
-  // === STEP 1 PDF FIX: Updated scale, background, onclone, and image type ===
   const handleDownloadReport = (reportRef) => {
     if (!reportRef.current) {
       console.error("Report element not found");
@@ -1293,41 +1379,32 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
     }
 
     html2canvas(reportRef.current, {
-      scale: 1, // Reduced scale to lower file size
-      backgroundColor: '#ffffff', // Set a white background for the canvas
+      scale: 1,
+      backgroundColor: '#ffffff',
       useCORS: true,
       onclone: (clonedDoc) => {
-        // Find the report element by its ID in the cloned document
         const reportElement = clonedDoc.getElementById('analysis-report-container');
         if (reportElement) {
-          // Force print-friendly styles
           reportElement.style.backgroundColor = '#ffffff';
           const allElements = reportElement.querySelectorAll('*');
           
           allElements.forEach((el) => {
-            // Force dark text and transparent backgrounds
             el.style.color = '#000000';
             el.style.backgroundColor = 'transparent';
-            el.style.backdropFilter = 'none'; // Remove blur effects
-            el.style.borderColor = '#dddddd'; // Use light gray for borders
+            el.style.backdropFilter = 'none';
+            el.style.borderColor = '#dddddd';
           });
           
-          // Hide all buttons
           reportElement.querySelectorAll('button').forEach(btn => (btn.style.display = 'none'));
-          
-          // Make sure quote marks are visible
           reportElement.querySelectorAll('.stylistic-quote-mark').forEach(mark => (mark.style.color = '#aaaaaa'));
-          
-          // Fix for donut charts (which are just divs)
           reportElement.querySelectorAll('.w-20.h-20.bg-\\[\\#3C4142\\]').forEach(donutHole => (donutHole.style.backgroundColor = '#ffffff'));
 
         } else {
-          // Fallback if ID is not found
           clonedDoc.body.style.backgroundColor = '#ffffff';
         }
       }
     }).then((canvas) => {
-      const imgData = canvas.toDataURL('image/jpeg', 0.9); // Use JPEG for smaller file size
+      const imgData = canvas.toDataURL('image/jpeg', 0.9);
       const pdfWidth = canvas.width;
       const pdfHeight = canvas.height;
       
@@ -1337,11 +1414,10 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
         format: [pdfWidth, pdfHeight]
       });
 
-      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight); // Use 'JPEG'
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
       pdf.save('SoWhatAI-Report.pdf');
     });
   };
-  // === END PDF FIX ===
 
   if (isLoading) {
     return (
@@ -1389,8 +1465,8 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
 export default function App() {
   const [user, setUser] = useState(null);
   const [page, setPage] = useState('home'); // 'home' | 'login' | 'dashboard' | 'app'
-  const [openingProjectId, setOpeningProjectId] = useState(null); // if user opens saved project
-  const [currentProjectId, setCurrentProjectId] = useState(null);  // last saved/created project id
+  const [openingProjectId, setOpeningProjectId] = useState(null);
+  const [currentProjectId, setCurrentProjectId] = useState(null);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -1405,7 +1481,7 @@ export default function App() {
 
   const handleLogin = (loggedInUser) => {
     setUser(loggedInUser);
-    setPage('dashboard'); // <-- SYNTAX FIX
+    setPage('dashboard');
   };
 
   const handleLogout = async () => {
