@@ -56,11 +56,13 @@ async function updateProject({ id, patch }) {
 /* =========================================================
   Netlify analyze function abstraction
   ========================================================= */
-async function callAnalyze({ textData, quantitativeData, researchQuestion, reportConfig }) {
+// === STEP 2: Updated function signature ===
+async function callAnalyze({ textSources, quantitativeData, researchQuestion, reportConfig }) {
   const res = await fetch('/.netlify/functions/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ textData, quantitativeData, researchQuestion, reportConfig })
+    // === STEP 2: Send `textSources` instead of `textData` ===
+    body: JSON.stringify({ textSources, quantitativeData, researchQuestion, reportConfig })
   });
   if (!res.ok) {
     let msg = `Analyze failed (${res.status})`;
@@ -296,25 +298,27 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) =>
     const filePromises = Array.from(files).map(file => {
       return new Promise((resolve) => {
         const fileId = Date.now() + file.name;
+        // === STEP 2: Add default category ===
         if (/\.txt$/i.test(file.name)) {
           const reader = new FileReader();
-          reader.onload = (e) => resolve({ id: fileId, name: file.name, type: 'text', content: e.target.result });
+          reader.onload = (e) => resolve({ id: fileId, name: file.name, type: 'text', content: e.target.result, category: 'general' });
           reader.readAsText(file);
         } else if (/\.docx?$/i.test(file.name)) {
           if (window.mammoth) {
             const reader = new FileReader();
             reader.onload = (e) => {
               window.mammoth.extractRawText({ arrayBuffer: e.target.result })
-                .then(result => resolve({ id: fileId, name: file.name, type: 'text', content: result.value }))
+                .then(result => resolve({ id: fileId, name: file.name, type: 'text', content: result.value, category: 'general' }))
                 .catch(() => resolve(null));
             };
             reader.readAsArrayBuffer(file);
           } else { resolve(null); }
         } else if (/\.(csv|xls|xlsx)$/i.test(file.name)) {
-          resolve({ id: fileId, name: file.name, type: 'spreadsheet', fileObject: file, mappings: {}, rows: [], headers: [] });
+          resolve({ id: fileId, name: file.name, type: 'spreadsheet', fileObject: file, mappings: {}, rows: [], headers: [], category: 'general' });
         } else {
           resolve(null);
         }
+        // === END STEP 2 ===
       });
     });
 
@@ -334,7 +338,7 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) =>
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-semibold text-white">Step 1: Build Your Data Set</h2>
-          <p className="text-sm text-gray-400">Add all your project files (.txt, .docx, .csv, .xlsx).</p>
+          <p className="text-sm text-gray-400">Add all your project files (.txt, .docx, .csv, .xlsx) and categorize them.</p>
         </div>
         {dataSet.length > 0 && (
           <button
@@ -359,7 +363,7 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) =>
           onClick={() => fileInputRef.current.click()}
           className="inline-flex items-center px-4 py-2 text-sm rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 border border-gray-600"
         >
-          <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
           Add File(s)
@@ -369,11 +373,27 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) =>
       <div>
         <h3 className="font-semibold text-lg text-white">Files in Your Data Set:</h3>
         <div className="mt-2 space-y-2">
-          {dataSet.map(file => (
-            <p key={file.id} className="p-2 bg-gray-800/70 text-gray-300 rounded-md truncate">
-              {file.name}
-            </p>
+          {/* === STEP 2: Added category dropdown === */}
+          {dataSet.map((file) => (
+            <div key={file.id} className="flex items-center justify-between p-2 bg-gray-800/70 rounded-md space-x-4">
+              <span className="text-gray-300 truncate flex-1">{file.name}</span>
+              <select
+                value={file.category}
+                onChange={(e) => {
+                  const newCategory = e.target.value;
+                  setDataSet(prev => prev.map(f => f.id === file.id ? { ...f, category: newCategory } : f));
+                }}
+                className="rounded-md border-gray-600 bg-gray-700 text-white text-sm focus:ring-[#13BBAF] focus:border-[#13BBAF]"
+              >
+                <option value="general">General</option>
+                <option value="interview">Interview</option>
+                <option value="survey">Survey</option>
+                <option value="usability_test">Usability Test</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
           ))}
+          {/* === END STEP 2 === */}
           {dataSet.length === 0 && <p className="text-gray-500">No files uploaded.</p>}
         </div>
       </div>
@@ -456,7 +476,7 @@ const MappingModal = ({ file, onClose, onSave }) => {
         <h3 className="text-lg font-semibold">Map Columns for: {file.name}</h3>
         {isLoading ? (
           <div className="flex items-center justify-center p-8">
-            <svg className="animate-spin h-5 w-5 text-white" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
@@ -470,7 +490,7 @@ const MappingModal = ({ file, onClose, onSave }) => {
                 <select
                   value={columnMappings[header]}
                   onChange={(e) => setColumnMappings(prev => ({ ...prev, [header]: e.target.value }))}
-                  className="rounded-md border-gray-600 bg-gray-700 text-white"
+                  className="rounded-md border-gray-600 bg-gray-700 text-white focus:ring-[#13BBAF] focus:border-[#13BBAF]"
                 >
                   <option value="ignore">Ignore</option>
                   <option value="text">Analyse for Themes</option>
@@ -605,7 +625,7 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
       ) : (
         <div className="text-center text-gray-400 p-8 bg-gray-800/50 rounded-md">
           <div className="flex justify-center items-center">
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
@@ -760,10 +780,12 @@ const ThematicAnalysisDisplay = ({ themes = [] }) => {
 };
 
 const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
-  const reportRef = useRef(null); // <-- FIX 3
+  const reportRef = useRef(null);
   const {
-    narrativeOverview, themes = [],
-    sentiment, sentimentDistribution, // `sentiment` prop will be undefined, which is fine.
+    narrativeOverview, 
+    themes = [], // === STEP 2: Keep for backward compatibility ===
+    analysisBySource = [], // === STEP 2: Add new structure ===
+    sentimentDistribution,
     verbatimQuotes, quantitativeResults, researchQuestion, soWhatActions
   } = results;
 
@@ -777,7 +799,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
         <div className="flex space-x-8">
           {textFilesCount > 0 && (
             <div className="flex items-center">
-              <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               <div>
@@ -788,7 +810,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
           )}
           {spreadsheets.length > 0 && (
             <div className="flex items-center">
-              <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
               <div>
@@ -917,7 +939,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
       <div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm">
         <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center">
           <h3 className="text-lg font-semibold text-white">Quantitative Analysis</h3>
-          <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className={`h-6 w-6 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
@@ -963,18 +985,17 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
   };
 
   return (
-    // === STEP 1 FIX: Added id="analysis-report-container" ===
     <div ref={reportRef} id="analysis-report-container" className="w-full bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6">
       <div className="flex justify-between items-center mb-6">
         <button onClick={onBack} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 border border-gray-600">
-          <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
           Back to Data Set
         </button>
         <h2 className="text-2xl font-semibold text-white">Analysis Report</h2>
-        <button onClick={() => onDownload(reportRef)} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-green-600 hover:bg-green-700"> {/* <-- FIX 3 */}
-          <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <button onClick={() => onDownload(reportRef)} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-green-600 hover:bg-green-700">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
           Download Report
@@ -988,8 +1009,29 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
           <NarrativeOverviewDisplay narrative={narrativeOverview} />
           <SoWhatDisplay actions={soWhatActions} />
         </div>
-        <SentimentSection distribution={sentimentDistribution} /> {/* `sentiment` prop removed */}
-        <ThematicAnalysisDisplay themes={themes} />
+        <SentimentSection distribution={sentimentDistribution} />
+        
+        {/* === STEP 2: Render old AND new theme structures for compatibility === */}
+        {/* Render old structure if it exists (for old reports) */}
+        {themes && themes.length > 0 && (
+          <ThematicAnalysisDisplay themes={themes} />
+        )}
+        
+        {/* Render new "Method-Aware" structure */}
+        {analysisBySource && analysisBySource.length > 0 && (
+          <div className="space-y-6">
+            {analysisBySource.map((sourceAnalysis, index) => (
+              <div key={index}>
+                <h2 className="text-2xl font-semibold text-white mb-4 border-b border-gray-700 pb-2 capitalize">
+                  Findings from: {sourceAnalysis.sourceType.replace(/_/g, ' ')}
+                </h2>
+                <ThematicAnalysisDisplay themes={sourceAnalysis.themes} />
+              </div>
+            ))}
+          </div>
+        )}
+        {/* === END STEP 2 === */}
+        
         <VerbatimQuotesDisplay quotes={verbatimQuotes} />
         <QuantitativeAnalysisDisplay quantData={quantitativeResults} />
       </div>
@@ -1101,8 +1143,17 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
         const report = row?.analysis_report || null;
         if (report) {
           setAnalysisResults(report);
-          // Keep dataset lightweight (names) if present in saved report
-          const savedDS = Array.isArray(report.dataSet) ? report.dataSet : [];
+          
+          // === STEP 2: Make project loading backward compatible ===
+          const savedDS = Array.isArray(report.dataSet)
+            ? report.dataSet.map(f => ({
+                name: f.name,
+                type: f.type,
+                category: f.category || 'general' // Add default for old reports
+              }))
+            : [];
+          // === END STEP 2 ===
+            
           setDataSet(savedDS);
           setWorkflowStep('report');
         } else {
@@ -1122,16 +1173,33 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
     setIsLoading(true);
     setError(null);
     try {
-      const textFilesContent = dataSet.filter(f => f.type === 'text').map(f => f.content).join('\n\n---\n\n');
+      // === STEP 2: Build new `textSources` array ===
+      const textSources = dataSet
+        .filter(f => f.type === 'text')
+        .map(f => ({
+          fileName: f.name,
+          category: f.category || 'general',
+          content: f.content
+        }));
+
       const spreadsheets = dataSet.filter(f => f.type === 'spreadsheet');
-      let spreadsheetText = '';
-      let quantitativePayload = [];
+      const quantitativePayload = [];
 
       spreadsheets.forEach(sheet => {
         if (sheet.rows && sheet.headers) {
+          // Get text data from spreadsheets
           const textColumns = sheet.headers.filter(header => sheet.mappings[header] === 'text');
-          spreadsheetText += sheet.rows.map(row => textColumns.map(header => row[header]).join(' ')).join('\n');
+          const sheetText = sheet.rows.map(row => textColumns.map(header => row[header]).join(' ')).join('\n');
+          
+          if (sheetText.trim()) {
+            textSources.push({
+              fileName: sheet.name,
+              category: sheet.category || 'survey', // Default spreadsheets to 'survey'
+              content: sheetText
+            });
+          }
 
+          // Get quantitative data from spreadsheets
           sheet.headers.forEach(header => {
             const mapping = sheet.mappings[header];
             if (mapping === 'stats' || mapping === 'category') {
@@ -1145,11 +1213,10 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
           });
         }
       });
-
-      const combinedText = [textFilesContent, spreadsheetText].filter(Boolean).join('\n\n---\n\n');
+      // === END STEP 2 ===
 
       const results = await callAnalyze({
-        textData: combinedText,
+        textSources: textSources, // <-- Send new structure
         quantitativeData: quantitativePayload,
         researchQuestion,
         reportConfig
@@ -1157,6 +1224,14 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
 
       setAnalysisResults(results);
       setWorkflowStep('report');
+
+      // === STEP 2: Persist new category data ===
+      const dataSetForSaving = dataSet.map(f => ({ 
+        name: f.name, 
+        type: f.type, 
+        category: f.category || 'general' 
+      }));
+      // === END STEP 2 ===
 
       // Persist: create or update
       try {
@@ -1166,16 +1241,16 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
             patch: {
               analysis_report: {
                 ...results,
-                dataSet: dataSet.map(f => ({ name: f.name, type: f.type }))
+                dataSet: dataSetForSaving // <-- Use new save object
               }
             }
           });
         } else {
           const created = await createProject({
-            name: researchQuestion?.slice(0, 60) || `Project ${new Date().toLocaleString()}`, // <-- FIX 1
+            name: researchQuestion?.slice(0, 60) || `Project ${new Date().toLocaleString()}`,
             analysis_report: {
               ...results,
-              dataSet: dataSet.map(f => ({ name: f.name, type: f.type }))
+              dataSet: dataSetForSaving // <-- Use new save object
             }
           });
           onSavedProjectId?.(created.id);
