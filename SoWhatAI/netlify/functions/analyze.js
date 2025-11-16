@@ -63,7 +63,7 @@ exports.handler = async (event) => {
       `You are a senior insights analyst. Return a valid JSON object with the following top-level fields:\n` +
       `- narrativeOverview: A summary of the key findings.\n` +
       `- themes: An array of themes.\n` +
-      `${sentimentPrompt}\n` +  // <-- 'sentiment' string removed
+      `${sentimentPrompt}\n` +
       `${soWhatPrompt}\n\n` +
       `For EACH theme, you MUST return:\n` +
       `- theme: concise name (title case)\n` +
@@ -84,7 +84,7 @@ exports.handler = async (event) => {
       `Research Question: "${researchQuestion || ''}"\n\n` +
       `Data:\n"""\n${textData || ''}\n"""\n`;
 
-    // ---- Dynamic response schema ---- (STEP 1B)
+    // ---- Dynamic response schema ----
     const properties = {
       narrativeOverview: { type: "STRING" },
       themes: {
@@ -92,7 +92,6 @@ exports.handler = async (event) => {
         items: {
           type: "OBJECT",
           properties: {
-            // Required interpretation fields
             theme: { type: "STRING" },
             themeNarrative: { type: "STRING" },
             drivers: { type: "ARRAY", items: { type: "STRING" } },
@@ -100,8 +99,6 @@ exports.handler = async (event) => {
             tensions: { type: "ARRAY", items: { type: "STRING" } },
             opportunities: { type: "ARRAY", items: { type: "STRING" } },
             confidence: { type: "NUMBER" },
-
-            // Legacy/display fields
             evidence: { type: "ARRAY", items: { type: "STRING" } },
             emoji: { type: "STRING" },
             prominence: { type: "NUMBER" }
@@ -111,8 +108,10 @@ exports.handler = async (event) => {
       }
     };
 
+    // === BUG FIX: Dynamically build the 'required' array ===
+    const requiredFields = ["narrativeOverview", "themes"];
+
     if (reportConfig?.components?.sentiment) {
-      // 'sentiment' string property removed
       properties.sentimentDistribution = {
         type: "OBJECT",
         properties: {
@@ -121,18 +120,22 @@ exports.handler = async (event) => {
           neutral: { type: "NUMBER" }
         }
       };
+      requiredFields.push("sentimentDistribution"); // Add to required
     }
     if (reportConfig?.components?.quotes) {
       properties.verbatimQuotes = { type: "ARRAY", items: { type: "STRING" } };
+      requiredFields.push("verbatimQuotes"); // Add to required
     }
     if (reportConfig?.components?.soWhat) {
       properties.soWhatActions = { type: "ARRAY", items: { type: "STRING" } };
+      requiredFields.push("soWhatActions"); // Add to required
     }
+    // === END BUG FIX ===
 
     // REST expects snake_case for generationConfig keys
     const generationConfig = {
       response_mime_type: 'application/json',
-      response_schema: { type: "OBJECT", properties, required: ["narrativeOverview", "themes"] }
+      response_schema: { type: "OBJECT", properties, required: requiredFields } // Use dynamic array
     };
 
     const payload = {
