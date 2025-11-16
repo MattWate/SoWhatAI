@@ -37,7 +37,7 @@ exports.handler = async (event) => {
       );
     }
     if (!reportConfig?.components?.sentiment) {
-      instructions.push("Do not include 'sentiment' or 'sentimentDistribution' fields in your response.");
+      instructions.push("Do not include 'sentimentDistribution' field in your response.");
     }
     if (!reportConfig?.components?.quotes) {
       instructions.push("Do not include the 'verbatimQuotes' field in your response.");
@@ -51,8 +51,7 @@ exports.handler = async (event) => {
 
     // --- Add conditional prompt instructions ---
     const sentimentPrompt = reportConfig?.components?.sentiment
-      ? `\n- sentiment: The overall sentiment of the text ('Positive', 'Negative', 'Neutral').\n` +
-        `- sentimentDistribution: An object with { positive: number, negative: number, neutral: number } as 0-1 decimals (e.g., 0.7, 0.2, 0.1).`
+      ? `\n- sentimentDistribution: An object with { positive: number, negative: number, neutral: number } as 0-1 decimals (e.g., 0.7, 0.2, 0.1).`
       : '';
 
     const soWhatPrompt = reportConfig?.components?.soWhat
@@ -64,11 +63,11 @@ exports.handler = async (event) => {
       `You are a senior insights analyst. Return a valid JSON object with the following top-level fields:\n` +
       `- narrativeOverview: A summary of the key findings.\n` +
       `- themes: An array of themes.\n` +
-      `${sentimentPrompt}\n` +  // <-- ADDED
-      `${soWhatPrompt}\n\n` +  // <-- ADDED
+      `${sentimentPrompt}\n` +  // <-- 'sentiment' string removed
+      `${soWhatPrompt}\n\n` +
       `For EACH theme, you MUST return:\n` +
       `- theme: concise name (title case)\n` +
-      `- prominence: a number from 0 to 1 representing the theme's importance or frequency (e.g., 0.85)\n` + // <-- ADDED
+      `- prominence: a number from 0 to 1 representing the theme's importance or frequency (e.g., 0.85)\n` +
       `- themeNarrative: 3–6 sentences that interpret the evidence (what it means, why it matters, implications)\n` +
       `- drivers: 2–4 short bullets (motivators/causes)\n` +
       `- barriers: 2–4 short bullets (frictions/constraints)\n` +
@@ -113,7 +112,7 @@ exports.handler = async (event) => {
     };
 
     if (reportConfig?.components?.sentiment) {
-      properties.sentiment = { type: "STRING" };
+      // 'sentiment' string property removed
       properties.sentimentDistribution = {
         type: "OBJECT",
         properties: {
