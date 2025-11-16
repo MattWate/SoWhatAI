@@ -7,7 +7,7 @@ exports.handler = async (event) => {
   try {
     const body = JSON.parse(event.body || '{}');
     const {
-      textData, // <-- Kept for fallback
+      textData, // Kept for fallback
       textSources, // === STEP 2: Receive new structure ===
       quantitativeData,
       researchQuestion,
@@ -81,7 +81,7 @@ exports.handler = async (event) => {
     }
     // === END STEP 2 ===
 
-    // === STEP 2: Update prompt for new structure ===
+    // === STEP 3: Update prompt for new structure ===
     const prompt =
       `You are a senior insights analyst. Return a valid JSON object with the following top-level fields:\n` +
       `- narrativeOverview: A high-level summary of all findings.\n` +
@@ -94,7 +94,9 @@ exports.handler = async (event) => {
       `For EACH theme in the 'themes' array, you MUST return:\n` +
       `- theme: concise name (title case)\n` +
       `- prominence: a number from 0 to 1 representing the theme's importance or frequency (e.g., 0.85)\n` +
+      `- emoji: A single emoji that represents the theme.\n` + // <-- Added requirement
       `- themeNarrative: 3–6 sentences that interpret the evidence (what it means, why it matters, implications)\n` +
+      `- quantitativeEvidence: A string summarizing any relevant counts from the data, if available (e.g., '15/50 survey responses' or 'Mentioned by 4 interviewees'). If not applicable, return null.\n` + // <-- NEW
       `- drivers: 2–4 short bullets (motivators/causes)\n` +
       `- barriers: 2–4 short bullets (frictions/constraints)\n` +
       `- tensions: 1–3 concise bullets (trade-offs/contradictions)\n` +
@@ -109,14 +111,15 @@ exports.handler = async (event) => {
       `${instructionText}\n\n` +
       `Research Question: "${researchQuestion || ''}"\n\n` +
       `Data:\n"""\n${dataForPrompt || ''}\n"""\n`;
-    // === END STEP 2 ===
+    // === END STEP 3 ===
 
-    // === STEP 2: Define theme schema once for re-use ===
+    // === STEP 3: Define theme schema once for re-use ===
     const themeProperties = {
       type: "OBJECT",
       properties: {
         theme: { type: "STRING" },
         themeNarrative: { type: "STRING" },
+        quantitativeEvidence: { type: "STRING" }, // <-- NEW
         drivers: { type: "ARRAY", items: { type: "STRING" } },
         barriers: { type: "ARRAY", items: { type: "STRING" } },
         tensions: { type: "ARRAY", items: { type: "STRING" } },
@@ -126,9 +129,9 @@ exports.handler = async (event) => {
         emoji: { type: "STRING" },
         prominence: { type: "NUMBER" }
       },
-      required: ["theme", "themeNarrative"]
+      required: ["theme", "themeNarrative", "prominence", "emoji"] // <-- FIX: Added prominence and emoji
     };
-    // === END STEP 2 ===
+    // === END STEP 3 ===
 
     // === STEP 2: Update response schema for new structure ===
     const properties = {
