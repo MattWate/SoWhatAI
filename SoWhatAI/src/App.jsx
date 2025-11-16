@@ -359,7 +359,7 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) =>
           onClick={() => fileInputRef.current.click()}
           className="inline-flex items-center px-4 py-2 text-sm rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 border border-gray-600"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
           Add File(s)
@@ -456,7 +456,7 @@ const MappingModal = ({ file, onClose, onSave }) => {
         <h3 className="text-lg font-semibold">Map Columns for: {file.name}</h3>
         {isLoading ? (
           <div className="flex items-center justify-center p-8">
-            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin h-5 w-5 text-white" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
@@ -605,7 +605,7 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
       ) : (
         <div className="text-center text-gray-400 p-8 bg-gray-800/50 rounded-md">
           <div className="flex justify-center items-center">
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
@@ -763,7 +763,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
   const reportRef = useRef(null); // <-- FIX 3
   const {
     narrativeOverview, themes = [],
-    sentiment, sentimentDistribution,
+    sentiment, sentimentDistribution, // `sentiment` prop will be undefined, which is fine.
     verbatimQuotes, quantitativeResults, researchQuestion, soWhatActions
   } = results;
 
@@ -777,7 +777,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
         <div className="flex space-x-8">
           {textFilesCount > 0 && (
             <div className="flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               <div>
@@ -788,7 +788,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
           )}
           {spreadsheets.length > 0 && (
             <div className="flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
               <div>
@@ -827,22 +827,34 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
     );
   };
 
-  const SentimentSection = ({ sentiment, distribution }) => {
-    if (!sentiment || !distribution) return null;
+  const SentimentSection = ({ distribution }) => { // `sentiment` prop removed
+    if (!distribution) return null;
 
-    // <-- FIX 4: Convert float (0-1) values to percentages (0-100)
+    // Convert float (0-1) values to percentages (0-100)
     const percentDistribution = {
       positive: (distribution.positive || 0) * 100,
       negative: (distribution.negative || 0) * 100,
       neutral: (distribution.neutral || 0) * 100,
     };
 
+    // === STEP 1 FIX: Calculate dominant sentiment ===
+    const { positive, negative, neutral } = percentDistribution;
+    let dominantSentiment = 'Neutral'; // Default
+    if (positive > negative && positive > neutral) {
+      dominantSentiment = 'Positive';
+    } else if (negative > positive && negative > neutral) {
+      dominantSentiment = 'Negative';
+    }
+    // === END FIX ===
+
     const sentimentStyles = {
       Positive: { bgColor: 'bg-green-900/50', textColor: 'text-green-300', borderColor: 'border-green-500/30', emoji: '😊', label: 'Positive' },
       Negative: { bgColor: 'bg-red-900/50', textColor: 'text-red-300', borderColor: 'border-red-500/30', emoji: '😞', label: 'Negative' },
       Neutral: { bgColor: 'bg-gray-700', textColor: 'text-gray-300', borderColor: 'border-gray-600', emoji: '😐', label: 'Neutral' }
     };
-    const styles = sentimentStyles[sentiment] || sentimentStyles['Neutral'];
+    
+    const styles = sentimentStyles[dominantSentiment] || sentimentStyles['Neutral']; // Use calculated sentiment
+    
     return (
       <div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm">
         <h3 className="text-lg font-semibold text-white mb-4 text-center">Overall Sentiment</h3>
@@ -853,8 +865,13 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
               <span className={`text-3xl font-bold ${styles.textColor}`}>{styles.label}</span>
             </div>
           </div>
-          <SentimentDonutChart distribution={percentDistribution} /> {/* <-- FIX 4 */}
+          <SentimentDonutChart distribution={percentDistribution} />
         </div>
+        {/* === STEP 1 FIX: Add trust note === */}
+        <p className="text-xs text-gray-500 text-center col-span-1 md:col-span-2 pt-4 mt-4 border-t border-gray-700/50">
+          Overall sentiment is estimated by the AI model based on an analysis of all text data. The label is assigned to the highest percentage.
+        </p>
+        {/* === END FIX === */}
       </div>
     );
   };
@@ -900,7 +917,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
       <div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm">
         <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center">
           <h3 className="text-lg font-semibold text-white">Quantitative Analysis</h3>
-          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className={`h-6 w-6 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
@@ -946,17 +963,18 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
   };
 
   return (
-    <div ref={reportRef} className="w-full bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6"> {/* <-- FIX 3 */}
+    // === STEP 1 FIX: Added id="analysis-report-container" ===
+    <div ref={reportRef} id="analysis-report-container" className="w-full bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6">
       <div className="flex justify-between items-center mb-6">
         <button onClick={onBack} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 border border-gray-600">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
           Back to Data Set
         </button>
         <h2 className="text-2xl font-semibold text-white">Analysis Report</h2>
         <button onClick={() => onDownload(reportRef)} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-green-600 hover:bg-green-700"> {/* <-- FIX 3 */}
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
           Download Report
@@ -970,7 +988,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
           <NarrativeOverviewDisplay narrative={narrativeOverview} />
           <SoWhatDisplay actions={soWhatActions} />
         </div>
-        <SentimentSection sentiment={sentiment} distribution={sentimentDistribution} />
+        <SentimentSection distribution={sentimentDistribution} /> {/* `sentiment` prop removed */}
         <ThematicAnalysisDisplay themes={themes} />
         <VerbatimQuotesDisplay quotes={verbatimQuotes} />
         <QuantitativeAnalysisDisplay quantData={quantitativeResults} />
@@ -1178,22 +1196,49 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
   const handleBackToUpload = () => { setWorkflowStep('upload'); setAnalysisResults(null); setDataSet([]); };
   const handleBackToConfig = () => { setWorkflowStep('configure'); setAnalysisResults(null); };
   
-  const handleDownloadReport = (reportRef) => { // <-- FIX 3
+  // === STEP 1 PDF FIX: Updated scale, background, onclone, and image type ===
+  const handleDownloadReport = (reportRef) => {
     if (!reportRef.current) {
       console.error("Report element not found");
       return;
     }
 
     html2canvas(reportRef.current, {
-      scale: 2, 
-      backgroundColor: '#030712', // A dark color close to your bg
+      scale: 1, // Reduced scale to lower file size
+      backgroundColor: '#ffffff', // Set a white background for the canvas
       useCORS: true,
-      onclone: (document) => {
-        // Ensure the clone's body has the dark background
-        document.body.style.backgroundColor = '#030712';
+      onclone: (clonedDoc) => {
+        // Find the report element by its ID in the cloned document
+        const reportElement = clonedDoc.getElementById('analysis-report-container');
+        if (reportElement) {
+          // Force print-friendly styles
+          reportElement.style.backgroundColor = '#ffffff';
+          const allElements = reportElement.querySelectorAll('*');
+          
+          allElements.forEach((el) => {
+            // Force dark text and transparent backgrounds
+            el.style.color = '#000000';
+            el.style.backgroundColor = 'transparent';
+            el.style.backdropFilter = 'none'; // Remove blur effects
+            el.style.borderColor = '#dddddd'; // Use light gray for borders
+          });
+          
+          // Hide all buttons
+          reportElement.querySelectorAll('button').forEach(btn => (btn.style.display = 'none'));
+          
+          // Make sure quote marks are visible
+          reportElement.querySelectorAll('.stylistic-quote-mark').forEach(mark => (mark.style.color = '#aaaaaa'));
+          
+          // Fix for donut charts (which are just divs)
+          reportElement.querySelectorAll('.w-20.h-20.bg-\\[\\#3C4142\\]').forEach(donutHole => (donutHole.style.backgroundColor = '#ffffff'));
+
+        } else {
+          // Fallback if ID is not found
+          clonedDoc.body.style.backgroundColor = '#ffffff';
+        }
       }
     }).then((canvas) => {
-      const imgData = canvas.toDataURL('image/png');
+      const imgData = canvas.toDataURL('image/jpeg', 0.9); // Use JPEG for smaller file size
       const pdfWidth = canvas.width;
       const pdfHeight = canvas.height;
       
@@ -1203,10 +1248,11 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
         format: [pdfWidth, pdfHeight]
       });
 
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight); // Use 'JPEG'
       pdf.save('SoWhatAI-Report.pdf');
     });
   };
+  // === END PDF FIX ===
 
   if (isLoading) {
     return (
@@ -1234,7 +1280,7 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
           dataSet={dataSet}
           results={analysisResults}
           onBack={handleBackToConfig}
-          onDownload={handleDownloadReport} // <-- FIX 3
+          onDownload={handleDownloadReport}
         />
       );
     case 'upload':
