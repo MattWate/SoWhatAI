@@ -21,7 +21,7 @@ async function listProjects() {
 }
 
 async function getProject(id) {
-  const { data, error } } = await supabase
+  const { data, error } = await supabase
     .from('projects')
     .select('id, project_name, created_at, analysis_report')
     .eq('id', id)
@@ -652,14 +652,86 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
 };
 
 /* ---------------- Report Step ---------------- */
-const ThematicAnalysisDisplay = ({ themes = [] }) => {
-  if (!themes || themes.length === 0) return null;
+
+// === STEP 5: Make ThematicAnalysisDisplay stateful for editing ===
+const ThematicAnalysisDisplay = ({
+  themes = [],
+  allResults,
+  onUpdateResults,
+  projectId,
+  sourceType
+}) => {
+  const [editingTheme, setEditingTheme] = useState(null); // Use theme title as ID
+  const [editText, setEditText] = useState({ title: '', narrative: '' });
 
   const Pill = ({ children }) => (
     <span className="inline-block bg-gray-800/70 text-gray-200 text-xs px-2 py-1 rounded-md mr-2 mb-2 border border-gray-700">
       {children}
     </span>
   );
+
+  const handleStartEdit = (theme) => {
+    setEditingTheme(theme.theme); // Use the original theme title as the ID
+    setEditText({ title: theme.theme, narrative: theme.themeNarrative });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTheme(null);
+    setEditText({ title: '', narrative: '' });
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingTheme) return;
+
+    // Create a deep copy to ensure immutability
+    const newResults = JSON.parse(JSON.stringify(allResults));
+
+    // Find and update the correct theme
+    if (sourceType === 'legacy') {
+      const themeIndex = newResults.themes.findIndex(t => t.theme === editingTheme);
+      if (themeIndex > -1) {
+        newResults.themes[themeIndex].theme = editText.title;
+        newResults.themes[themeIndex].themeNarrative = editText.narrative;
+      }
+    } else {
+      const sourceIndex = newResults.analysisBySource.findIndex(s => s.sourceType === sourceType);
+      if (sourceIndex > -1) {
+        const themeIndex = newResults.analysisBySource[sourceIndex].themes.findIndex(t => t.theme === editingTheme);
+        if (themeIndex > -1) {
+          newResults.analysisBySource[sourceIndex].themes[themeIndex].theme = editText.title;
+          newResults.analysisBySource[sourceIndex].themes[themeIndex].themeNarrative = editText.narrative;
+        }
+      }
+    }
+
+    // 1. Update local React state immediately for UI responsiveness
+    onUpdateResults(newResults);
+    
+    // 2. Persist the change to Supabase async (fire-and-forget)
+    if (projectId) {
+      // Get the lightweight dataset for saving
+      const dataSetForSaving = (allResults.dataSet || []).map(f => ({ 
+        name: f.name, 
+        type: f.type, 
+        category: f.category || 'general' 
+      }));
+      
+      updateProject({ 
+        id: projectId, 
+        patch: { 
+          analysis_report: { ...newResults, dataSet: dataSetForSaving }
+        }
+      }).catch(err => {
+        // Log persistence errors but don't block the user
+        console.error("Failed to persist theme edit:", err);
+      });
+    }
+
+    // 3. Exit editing mode
+    handleCancelEdit();
+  };
+
+  if (!themes || themes.length === 0) return null;
 
   return (
     <div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm">
@@ -692,86 +764,136 @@ const ThematicAnalysisDisplay = ({ themes = [] }) => {
           const hasBarriers = Array.isArray(t.barriers) && t.barriers.length > 0;
           const hasTensions = Array.isArray(t.tensions) && t.tensions.length > 0;
           const hasOpps = Array.isArray(t.opportunities) && t.opportunities.length > 0;
-          const isEmpty =
-            !t.themeNarrative && !hasDrivers && !hasBarriers && !hasTensions && !hasOpps && quotes.length === 0;
 
-          if (isEmpty) return null;
+          const isEditing = editingTheme === t.theme;
 
           return (
             <li key={`${t.theme}-${idx}`} className="flex flex-col p-4 bg-gray-900/70 rounded-md shadow-sm">
-              <div className="flex items-center mb-3">
-                <span className="text-2xl mr-4">{t.emoji}</span>
-                <span className="text-white font-bold text-lg">{t.theme}</span>
-              </div>
-
-              {t.themeNarrative && (
-                <div className="mb-2">
-                  <div className="text-gray-300 text-sm font-semibold mb-1">Theme narrative</div>
-                  <p className="text-gray-200 leading-relaxed">{t.themeNarrative}</p>
-                </div>
-              )}
-              
-              {t.quantitativeEvidence && (
-                <div className="mt-2 mb-2">
-                  <span className="inline-flex items-center bg-teal-900/70 text-teal-200 text-xs px-3 py-1 rounded-full border border-teal-700">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-                    </svg>
-                    {t.quantitativeEvidence}
-                  </span>
-                </div>
-              )}
-
-              {(hasDrivers || hasBarriers) && (
-                <div className="grid md:grid-cols-2 gap-3 mt-2">
-                  {hasDrivers && (
-                    <div>
-                      <div className="text-gray-300 text-sm font-semibold mb-1">Key drivers</div>
-                      <div className="flex flex-wrap">
-                        {t.drivers.slice(0, 6).map((d, i) => <Pill key={i}>{d}</Pill>)}
-                      </div>
-                    </div>
-                  )}
-                  {hasBarriers && (
-                    <div>
-                      <div className="text-gray-300 text-sm font-semibold mb-1">Barriers / frictions</div>
-                      <div className="flex flex-wrap">
-                        {t.barriers.slice(0, 6).map((b, i) => <Pill key={i}>{b}</Pill>)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {hasTensions && (
-                <div className="mt-3">
-                  <div className="text-gray-300 text-sm font-semibold mb-1">Tensions & trade-offs</div>
-                  <ul className="list-disc list-inside text-gray-200 space-y-1">
-                    {t.tensions.slice(0, 4).map((x, i) => <li key={i}>{x}</li>)}
-                  </ul>
-                </div>
-              )}
-
-              {hasOpps && (
-                <div className="mt-3">
-                  <div className="text-gray-300 text-sm font-semibold mb-1">Opportunities</div>
-                  <ul className="list-disc list-inside text-gray-200 space-y-1">
-                    {t.opportunities.slice(0, 6).map((o, i) => <li key={i}>{o}</li>)}
-                  </ul>
-                </div>
-              )}
-
-              {quotes.length > 0 && (
-                <div className="mt-3">
-                  <div className="text-gray-300 text-sm font-semibold mb-1">Supporting quotes</div>
-                  <div className="space-y-2">
-                    {quotes.map((q, i) => (
-                      <blockquote key={i} className="border-l-4 border-[#13BBAF] pl-4">
-                        <p className="text-gray-400 italic">"{q}"</p>
-                      </blockquote>
-                    ))}
+              {isEditing ? (
+                /* === EDITING VIEW === */
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-sm font-medium text-gray-400 block mb-1">Theme Title</label>
+                    <input
+                      type="text"
+                      value={editText.title}
+                      onChange={(e) => setEditText(p => ({ ...p, title: e.target.value }))}
+                      className="shadow-sm focus:ring-[#13BBAF] focus:border-[#13BBAF] block w-full sm:text-sm border-gray-600 bg-gray-800 text-white rounded-md p-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-400 block mb-1">Theme Narrative</label>
+                    <textarea
+                      rows={4}
+                      value={editText.narrative}
+                      onChange={(e) => setEditText(p => ({ ...p, narrative: e.target.value }))}
+                      className="shadow-sm focus:ring-[#13BBAF] focus:border-[#13BBAF] block w-full sm:text-sm border-gray-600 bg-gray-800 text-white rounded-md p-2"
+                    />
+                  </div>
+                  <div className="flex justify-end space-x-3">
+                    <button
+                      onClick={handleCancelEdit}
+                      className="px-3 py-1 text-sm rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveEdit}
+                      className="px-3 py-1 text-sm rounded-md text-white bg-green-600 hover:bg-green-700"
+                    >
+                      Save
+                    </button>
                   </div>
                 </div>
+              ) : (
+                /* === DISPLAY VIEW === */
+                <>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center">
+                      <span className="text-2xl mr-4">{t.emoji}</span>
+                      <span className="text-white font-bold text-lg">{t.theme}</span>
+                    </div>
+                    <button
+                      onClick={() => handleStartEdit(t)}
+                      className="text-gray-500 hover:text-white transition-colors"
+                      title="Edit theme"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {t.themeNarrative && (
+                    <div className="mb-2">
+                      <div className="text-gray-300 text-sm font-semibold mb-1">Theme narrative</div>
+                      <p className="text-gray-200 leading-relaxed">{t.themeNarrative}</p>
+                    </div>
+                  )}
+                  
+                  {t.quantitativeEvidence && (
+                    <div className="mt-2 mb-2">
+                      <span className="inline-flex items-center bg-teal-900/70 text-teal-200 text-xs px-3 py-1 rounded-full border border-teal-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                        </svg>
+                        {t.quantitativeEvidence}
+                      </span>
+                    </div>
+                  )}
+
+                  {(hasDrivers || hasBarriers) && (
+                    <div className="grid md:grid-cols-2 gap-3 mt-2">
+                      {hasDrivers && (
+                        <div>
+                          <div className="text-gray-300 text-sm font-semibold mb-1">Key drivers</div>
+                          <div className="flex flex-wrap">
+                            {t.drivers.slice(0, 6).map((d, i) => <Pill key={i}>{d}</Pill>)}
+                          </div>
+                        </div>
+                      )}
+                      {hasBarriers && (
+                        <div>
+                          <div className="text-gray-300 text-sm font-semibold mb-1">Barriers / frictions</div>
+                          <div className="flex flex-wrap">
+                            {t.barriers.slice(0, 6).map((b, i) => <Pill key={i}>{b}</Pill>)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {hasTensions && (
+                    <div className="mt-3">
+                      <div className="text-gray-300 text-sm font-semibold mb-1">Tensions & trade-offs</div>
+                      <ul className="list-disc list-inside text-gray-200 space-y-1">
+                        {t.tensions.slice(0, 4).map((x, i) => <li key={i}>{x}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {hasOpps && (
+                    <div className="mt-3">
+                      <div className="text-gray-300 text-sm font-semibold mb-1">Opportunities</div>
+                      <ul className="list-disc list-inside text-gray-200 space-y-1">
+                        {t.opportunities.slice(0, 6).map((o, i) => <li key={i}>{o}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {quotes.length > 0 && (
+                    <div className="mt-3">
+                      <div className="text-gray-300 text-sm font-semibold mb-1">Supporting quotes</div>
+                      <div className="space-y-2">
+                        {quotes.map((q, i) => (
+                          <blockquote key={i} className="border-l-4 border-[#13BBAF] pl-4">
+                            <p className="text-gray-400 italic">"{q}"</p>
+                          </blockquote>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </li>
           );
@@ -780,6 +902,7 @@ const ThematicAnalysisDisplay = ({ themes = [] }) => {
     </div>
   );
 };
+// === END STEP 5 ===
 
 /* === STEP 4: New ReportSidebar Component === */
 const ReportSidebar = ({ results }) => {
@@ -789,13 +912,11 @@ const ReportSidebar = ({ results }) => {
     soWhatActions
   } = results;
 
-  // Helper to capitalize and format source types
   const formatSourceType = (type) => {
     return (type || 'general').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
   return (
-    // === FIX: Removed sticky classes from nav ===
     <nav className="self-start">
       <h3 className="text-sm font-semibold uppercase text-gray-500 tracking-wider mb-3">
         On this page
@@ -823,7 +944,6 @@ const ReportSidebar = ({ results }) => {
           </li>
         )}
         
-        {/* Backward compatibility for old reports */}
         {themes && themes.length > 0 && (
           <li>
             <a href="#report-themes-legacy" className="text-gray-400 hover:text-white transition-colors">
@@ -832,7 +952,6 @@ const ReportSidebar = ({ results }) => {
           </li>
         )}
 
-        {/* New method-aware links */}
         {analysisBySource && analysisBySource.length > 0 && (
           <ul className="pl-3 space-y-2 border-l border-gray-700">
             {analysisBySource.map((source, index) => (
@@ -857,7 +976,7 @@ const ReportSidebar = ({ results }) => {
         )}
         {quantitativeResults && quantitativeResults.length > 0 && (
           <li>
-            <a href="#report-quantitative" className="text-gray-400 hover:text-white transition-colors">
+            <a href href="#report-quantitative" className="text-gray-400 hover:text-white transition-colors">
               Quantitative
             </a>
           </li>
@@ -869,7 +988,8 @@ const ReportSidebar = ({ results }) => {
 /* === END STEP 4 === */
 
 
-const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
+// === STEP 5: Add onUpdateResults and projectId props ===
+const AnalysisReportPage = ({ dataSet, onBack, results, onDownload, onUpdateResults, projectId }) => {
   const reportRef = useRef(null);
   const {
     narrativeOverview, 
@@ -1069,22 +1189,18 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
     );
   };
 
-  // Helper to capitalize and format source types
   const formatSourceType = (type) => {
     return (type || 'general').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
   return (
-    /* === STEP 4: Changed layout to grid === */
     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
       
-      {/* --- Sidebar (Column 1) --- */}
       {/* === FIX: Added sticky classes to the column div === */}
       <div className="md:col-span-1 sticky top-24 self-start">
         <ReportSidebar results={results} />
       </div>
 
-      {/* --- Main Report Content (Column 2) --- */}
       <div className="md:col-span-3">
         <div ref={reportRef} id="analysis-report-container" className="w-full bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6">
           <div className="flex justify-between items-center mb-6">
@@ -1103,7 +1219,6 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
             </button>
           </div>
 
-          {/* === STEP 4: Added IDs to all sections for sidebar navigation === */}
           <div className="space-y-6">
             <DataSetOverview dataSet={dataSet} />
             <ResearchQuestionDisplay question={researchQuestion} />
@@ -1113,14 +1228,19 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
             </div>
             <SentimentSection distribution={sentimentDistribution} />
             
-            {/* Render old structure if it exists (for old reports) */}
             {themes && themes.length > 0 && (
               <div id="report-themes-legacy" className="scroll-mt-24">
-                <ThematicAnalysisDisplay themes={themes} />
+                {/* === STEP 5: Pass editing props === */}
+                <ThematicAnalysisDisplay 
+                  themes={themes} 
+                  allResults={results}
+                  onUpdateResults={onUpdateResults}
+                  projectId={projectId}
+                  sourceType="legacy"
+                />
               </div>
             )}
             
-            {/* Render new "Method-Aware" structure */}
             {analysisBySource && analysisBySource.length > 0 && (
               <div className="space-y-6">
                 {analysisBySource.map((sourceAnalysis, index) => (
@@ -1128,7 +1248,14 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
                     <h2 className="text-2xl font-semibold text-white mb-4 border-b border-gray-700 pb-2 capitalize">
                       Findings from: {formatSourceType(sourceAnalysis.sourceType)}
                     </h2>
-                    <ThematicAnalysisDisplay themes={sourceAnalysis.themes} />
+                    {/* === STEP 5: Pass editing props === */}
+                    <ThematicAnalysisDisplay 
+                      themes={sourceAnalysis.themes}
+                      allResults={results}
+                      onUpdateResults={onUpdateResults}
+                      projectId={projectId}
+                      sourceType={sourceAnalysis.sourceType}
+                    />
                   </div>
                 ))}
               </div>
@@ -1137,7 +1264,6 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload }) => {
             <VerbatimQuotesDisplay quotes={verbatimQuotes} />
             <QuantitativeAnalysisDisplay quantData={quantitativeResults} />
           </div>
-          {/* === END STEP 4 === */}
         </div>
       </div>
     </div>
@@ -1232,14 +1358,15 @@ const CategoryChart = ({ category }) => {
 };
 
 /* ---------------- Analysis Tool (orchestrator) ---------------- */
-const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) => {
+// === STEP 5: Remove `onSavedProjectId` prop ===
+const AnalysisToolPage = ({ onNavigate, initialProjectId }) => {
   const [workflowStep, setWorkflowStep] = useState('upload');
   const [dataSet, setDataSet] = useState([]);
   const [analysisResults, setAnalysisResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // === STEP 5: Need currentProjectId in this scope ===
+  // === STEP 5: Add state for currentProjectId ===
   const [currentProjectId, setCurrentProjectId] = useState(null);
   
   useEffect(() => {
@@ -1330,39 +1457,39 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId, onSavedProjectId }) =>
         researchQuestion,
         reportConfig
       });
-
-      setAnalysisResults(results);
-      setWorkflowStep('report');
-
+      
+      // === STEP 5: Pass the lightweight dataSet into the results object ===
       const dataSetForSaving = dataSet.map(f => ({ 
         name: f.name, 
         type: f.type, 
         category: f.category || 'general' 
       }));
+      
+      const fullResults = {
+        ...results,
+        dataSet: dataSetForSaving
+      };
+      
+      setAnalysisResults(fullResults);
+      // === END STEP 5 ===
+      
+      setWorkflowStep('report');
 
       try {
-        if (initialProjectId) {
+        // === STEP 5: Use internal `currentProjectId` state ===
+        if (currentProjectId) {
           await updateProject({
-            id: initialProjectId,
-            patch: {
-              analysis_report: {
-                ...results,
-                dataSet: dataSetForSaving
-              }
-            }
+            id: currentProjectId,
+            patch: { analysis_report: fullResults }
           });
         } else {
           const created = await createProject({
             name: researchQuestion?.slice(0, 60) || `Project ${new Date().toLocaleString()}`,
-            analysis_report: {
-              ...results,
-              dataSet: dataSetForSaving
-            }
+            analysis_report: fullResults
           });
-          // === STEP 5: Update state ===
-          setCurrentProjectId(created.id);
-          onSavedProjectId?.(created.id);
+          setCurrentProjectId(created.id); // <-- Set the ID for future edits
         }
+        // === END STEP 5 ===
       } catch (persistErr) {
         console.error('Project save failed:', persistErr);
       }
@@ -1477,8 +1604,7 @@ export default function App() {
   const [page, setPage] = useState('home');
   const [openingProjectId, setOpeningProjectId] = useState(null);
   
-  // === STEP 5: Remove this state, it's now managed in AnalysisToolPage ===
-  // const [currentProjectId, setCurrentProjectId] = useState(null);
+  // === STEP 5: Removed `currentProjectId` state from App ===
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -1501,7 +1627,6 @@ export default function App() {
     setUser(null);
     setPage('home');
     setOpeningProjectId(null);
-    // setCurrentProjectId(null); // <-- Removed in Step 5
   };
 
   const handleNavigate = (destination) => {
@@ -1518,7 +1643,6 @@ export default function App() {
 
   const handleOpenProject = async (projectId) => {
     setOpeningProjectId(projectId);
-    // setCurrentProjectId(projectId); // <-- Removed in Step 5
     setPage('app');
   };
 
@@ -1536,8 +1660,6 @@ export default function App() {
             <AnalysisToolPage
               onNavigate={handleNavigate}
               initialProjectId={openingProjectId}
-              // === STEP 5: This prop is no longer needed here ===
-              // onSavedProjectId={(id) => setCurrentProjectId(id)}
             />
           ) : (
             <DashboardPage
