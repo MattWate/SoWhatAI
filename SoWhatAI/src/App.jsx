@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from './supabaseClient.js';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import PptxGenJS from 'pptxgenjs'; // <--- NEW IMPORT
 
 /* =========================================================
   Supabase helpers (CRUD)
@@ -653,7 +654,6 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
 
 /* ---------------- Report Step ---------------- */
 
-// === STEP 5: Make ThematicAnalysisDisplay stateful for editing ===
 const ThematicAnalysisDisplay = ({
   themes = [],
   allResults,
@@ -661,7 +661,7 @@ const ThematicAnalysisDisplay = ({
   projectId,
   sourceType
 }) => {
-  const [editingTheme, setEditingTheme] = useState(null); // Use theme title as ID
+  const [editingTheme, setEditingTheme] = useState(null);
   const [editText, setEditText] = useState({ title: '', narrative: '' });
 
   const Pill = ({ children }) => (
@@ -671,7 +671,7 @@ const ThematicAnalysisDisplay = ({
   );
 
   const handleStartEdit = (theme) => {
-    setEditingTheme(theme.theme); // Use the original theme title as the ID
+    setEditingTheme(theme.theme);
     setEditText({ title: theme.theme, narrative: theme.themeNarrative });
   };
 
@@ -683,10 +683,8 @@ const ThematicAnalysisDisplay = ({
   const handleSaveEdit = () => {
     if (!editingTheme) return;
 
-    // Create a deep copy to ensure immutability
     const newResults = JSON.parse(JSON.stringify(allResults));
 
-    // Find and update the correct theme
     if (sourceType === 'legacy') {
       const themeIndex = newResults.themes.findIndex(t => t.theme === editingTheme);
       if (themeIndex > -1) {
@@ -704,12 +702,9 @@ const ThematicAnalysisDisplay = ({
       }
     }
 
-    // 1. Update local React state immediately for UI responsiveness
     onUpdateResults(newResults);
     
-    // 2. Persist the change to Supabase async (fire-and-forget)
     if (projectId) {
-      // Get the lightweight dataset for saving
       const dataSetForSaving = (allResults.dataSet || []).map(f => ({ 
         name: f.name, 
         type: f.type, 
@@ -722,12 +717,10 @@ const ThematicAnalysisDisplay = ({
           analysis_report: { ...newResults, dataSet: dataSetForSaving }
         }
       }).catch(err => {
-        // Log persistence errors but don't block the user
         console.error("Failed to persist theme edit:", err);
       });
     }
 
-    // 3. Exit editing mode
     handleCancelEdit();
   };
 
@@ -770,7 +763,6 @@ const ThematicAnalysisDisplay = ({
           return (
             <li key={`${t.theme}-${idx}`} className="flex flex-col p-4 bg-gray-900/70 rounded-md shadow-sm">
               {isEditing ? (
-                /* === EDITING VIEW === */
                 <div className="space-y-3">
                   <div>
                     <label className="text-sm font-medium text-gray-400 block mb-1">Theme Title</label>
@@ -806,7 +798,6 @@ const ThematicAnalysisDisplay = ({
                   </div>
                 </div>
               ) : (
-                /* === DISPLAY VIEW === */
                 <>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center">
@@ -902,9 +893,7 @@ const ThematicAnalysisDisplay = ({
     </div>
   );
 };
-// === END STEP 5 ===
 
-/* === STEP 4: New ReportSidebar Component === */
 const ReportSidebar = ({ results }) => {
   const {
     narrativeOverview, themes = [], analysisBySource = [],
@@ -943,7 +932,6 @@ const ReportSidebar = ({ results }) => {
             </a>
           </li>
         )}
-        
         {themes && themes.length > 0 && (
           <li>
             <a href="#report-themes-legacy" className="text-gray-400 hover:text-white transition-colors">
@@ -951,7 +939,6 @@ const ReportSidebar = ({ results }) => {
             </a>
           </li>
         )}
-
         {analysisBySource && analysisBySource.length > 0 && (
           <ul className="pl-3 space-y-2 border-l border-gray-700">
             {analysisBySource.map((source, index) => (
@@ -966,7 +953,6 @@ const ReportSidebar = ({ results }) => {
             ))}
           </ul>
         )}
-        
         {verbatimQuotes && verbatimQuotes.length > 0 && (
           <li>
             <a href="#report-quotes" className="text-gray-400 hover:text-white transition-colors">
@@ -976,7 +962,7 @@ const ReportSidebar = ({ results }) => {
         )}
         {quantitativeResults && quantitativeResults.length > 0 && (
           <li>
-            <a href href="#report-quantitative" className="text-gray-400 hover:text-white transition-colors">
+            <a href="#report-quantitative" className="text-gray-400 hover:text-white transition-colors">
               Quantitative
             </a>
           </li>
@@ -985,10 +971,7 @@ const ReportSidebar = ({ results }) => {
     </nav>
   );
 };
-/* === END STEP 4 === */
 
-
-// === STEP 5: Add onUpdateResults and projectId props ===
 const AnalysisReportPage = ({ dataSet, onBack, results, onDownload, onUpdateResults, projectId }) => {
   const reportRef = useRef(null);
   const {
@@ -999,204 +982,118 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload, onUpdateResu
     verbatimQuotes, quantitativeResults, researchQuestion, soWhatActions
   } = results;
 
-  const DataSetOverview = ({ dataSet }) => {
-    const textFilesCount = dataSet.filter(f => f.type === 'text').length;
-    const spreadsheets = dataSet.filter(f => f.type === 'spreadsheet');
-    const spreadsheetRowsCount = spreadsheets.reduce((acc, file) => acc + (file.rows?.length || 0), 0);
-    return (
-      <div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm mb-6">
-        <h3 className="text-lg font-semibold text-white mb-3">Data Set Overview</h3>
-        <div className="flex space-x-8">
-          {textFilesCount > 0 && (
-            <div className="flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <div>
-                <p className="text-2xl font-bold text-white">{textFilesCount}</p>
-                <p className="text-sm text-gray-400">Text Documents</p>
-              </div>
-            </div>
-          )}
-          {spreadsheets.length > 0 && (
-            <div className="flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-              <div>
-                <p className="text-2xl font-bold text-white">{spreadsheetRowsCount}</p>
-                <p className="text-sm text-gray-400">Survey Responses</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
+  // === STEP 6: Generate Native PowerPoint ===
+  const handleDownloadDeck = async () => {
+    const pres = new PptxGenJS();
+    
+    // --- Slide 1: Title ---
+    let slide = pres.addSlide();
+    slide.background = { color: "FFFFFF" };
+    slide.addText("SoWhatAI Analysis Report", { x: 0.5, y: 2, w: "90%", fontSize: 36, bold: true, color: "363636" });
+    if (researchQuestion) {
+       slide.addText(researchQuestion, { x: 0.5, y: 3, w: "90%", fontSize: 18, color: "7d7d7d" });
+    }
+    slide.addText(`Generated: ${new Date().toLocaleDateString()}`, { x: 0.5, y: 5, fontSize: 12, color: "D3D3D3" });
 
-  const ResearchQuestionDisplay = ({ question }) =>
-    question && (
-      <div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm mb-6">
-        <h3 className="text-lg font-semibold text-white">Research Question</h3>
-        <p className="mt-2 text-gray-300 italic">"{question}"</p>
-      </div>
-    );
-
-  const SentimentDonutChart = ({ distribution }) => {
-    const { positive, negative, neutral } = distribution;
-    const conicGradient = `conic-gradient(#ef4444 0% ${negative}%, #84cc16 ${negative}% ${negative + positive}%, #95A3A6 ${negative + positive}% 100%)`;
-    return (
-      <div className="flex flex-col items-center">
-        <div style={{ background: conicGradient }} className="w-32 h-32 rounded-full flex items-center justify-center">
-          <div className="w-20 h-20 bg-[#3C4142] rounded-full"></div>
-        </div>
-        <div className="flex justify-center space-x-4 mt-4 text-sm">
-          <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-red-500 mr-2"></span>Negative ({negative.toFixed(1)}%)</div>
-          <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-lime-500 mr-2"></span>Positive ({positive.toFixed(1)}%)</div>
-          <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-[#95A3A6] mr-2"></span>Neutral ({neutral.toFixed(1)}%)</div>
-        </div>
-      </div>
-    );
-  };
-
-  const SentimentSection = ({ distribution }) => {
-    if (!distribution) return null;
-
-    const percentDistribution = {
-      positive: (distribution.positive || 0) * 100,
-      negative: (distribution.negative || 0) * 100,
-      neutral: (distribution.neutral || 0) * 100,
-    };
-
-    const { positive, negative, neutral } = percentDistribution;
-    let dominantSentiment = 'Neutral';
-    if (positive > negative && positive > neutral) {
-      dominantSentiment = 'Positive';
-    } else if (negative > positive && negative > neutral) {
-      dominantSentiment = 'Negative';
+    // --- Slide 2: Executive Summary ---
+    if (narrativeOverview) {
+      slide = pres.addSlide();
+      slide.background = { color: "FFFFFF" };
+      slide.addText("Executive Summary", { x: 0.5, y: 0.5, fontSize: 24, bold: true, color: "363636" });
+      slide.addText(narrativeOverview, { x: 0.5, y: 1.2, w: "90%", fontSize: 14, color: "4a4a4a" });
     }
 
-    const sentimentStyles = {
-      Positive: { bgColor: 'bg-green-900/50', textColor: 'text-green-300', borderColor: 'border-green-500/30', emoji: '😊', label: 'Positive' },
-      Negative: { bgColor: 'bg-red-900/50', textColor: 'text-red-300', borderColor: 'border-red-500/30', emoji: '😞', label: 'Negative' },
-      Neutral: { bgColor: 'bg-gray-700', textColor: 'text-gray-300', borderColor: 'border-gray-600', emoji: '😐', label: 'Neutral' }
+    // --- Slide 3: So What? ---
+    if (soWhatActions && soWhatActions.length > 0) {
+      slide = pres.addSlide();
+      slide.background = { color: "FFFFFF" };
+      slide.addText("So What? & Recommendations", { x: 0.5, y: 0.5, fontSize: 24, bold: true, color: "363636" });
+      
+      const bullets = soWhatActions.map(action => ({ text: action, options: { fontSize: 14, color: "4a4a4a", bullet: true } }));
+      slide.addText(bullets, { x: 0.5, y: 1.2, w: "90%", h: 4 });
+    }
+
+    // --- Slide 4: Sentiment Overview ---
+    if (sentimentDistribution) {
+      slide = pres.addSlide();
+      slide.background = { color: "FFFFFF" };
+      slide.addText("Sentiment Overview", { x: 0.5, y: 0.5, fontSize: 24, bold: true, color: "363636" });
+
+      const chartData = [{
+        name: "Sentiment",
+        labels: ["Positive", "Negative", "Neutral"],
+        values: [sentimentDistribution.positive, sentimentDistribution.negative, sentimentDistribution.neutral]
+      }];
+      
+      slide.addChart(pres.ChartType.doughnut, chartData, { 
+        x: 3, y: 1.5, w: 4, h: 3,
+        showLabel: true, showPercent: true,
+        chartColors: ['84cc16', 'ef4444', '9ca3af'] // Green, Red, Gray
+      });
+    }
+
+    // --- Helper to create theme slides ---
+    const createThemeSlides = (sourceThemes, sectionTitle) => {
+      if (!sourceThemes || sourceThemes.length === 0) return;
+
+      // Section Header Slide
+      slide = pres.addSlide();
+      slide.background = { color: "13BBAF" }; // Teal background
+      slide.addText(sectionTitle, { x: 0, y: 2.5, w: "100%", align: 'center', fontSize: 36, bold: true, color: "FFFFFF" });
+
+      sourceThemes.forEach(t => {
+        slide = pres.addSlide();
+        slide.background = { color: "FFFFFF" };
+
+        // Header
+        slide.addText(`${t.emoji || ''} ${t.theme}`, { x: 0.5, y: 0.4, w: "90%", fontSize: 24, bold: true, color: "363636" });
+        
+        // Left Col: Narrative
+        slide.addText(t.themeNarrative || "", { x: 0.5, y: 1.2, w: 4.5, fontSize: 12, color: "4a4a4a" });
+
+        // Left Col: Stats Pill (if exists)
+        if (t.quantitativeEvidence) {
+          slide.addText(t.quantitativeEvidence, { 
+            x: 0.5, y: 3.5, w: 4.5, h: 0.5, 
+            fontSize: 11, color: "13BBAF", bold: true,
+            shape: pres.ShapeType.roundRect, fill: { color: "F0FDFA" }, line: { color: "13BBAF" }
+          });
+        }
+
+        // Right Col: Quotes
+        if (t.evidence && t.evidence.length > 0) {
+           slide.addText("Key Evidence:", { x: 5.2, y: 1.2, fontSize: 12, bold: true, color: "363636" });
+           const quotes = t.evidence.map(q => ({ text: `"${q}"`, options: { fontSize: 11, color: "666666", italic: true, breakLine: true } }));
+           slide.addText(quotes, { x: 5.2, y: 1.5, w: 4.5, h: 3 });
+        }
+
+        // Bottom: Drivers/Barriers
+        let bottomY = 4.2;
+        const drivers = (t.drivers || []).slice(0, 4).join(", ");
+        const barriers = (t.barriers || []).slice(0, 4).join(", ");
+        
+        if (drivers || barriers) {
+          slide.addText(`Drivers: ${drivers} | Barriers: ${barriers}`, { x: 0.5, y: bottomY, w: "90%", fontSize: 10, color: "888888" });
+        }
+      });
     };
-    
-    const styles = sentimentStyles[dominantSentiment] || sentimentStyles['Neutral'];
-    
-    return (
-      <div id="report-sentiment" className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm scroll-mt-24">
-        <h3 className="text-lg font-semibold text-white mb-4 text-center">Overall Sentiment</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-          <div className={`p-4 rounded-lg border ${styles.borderColor} ${styles.bgColor}`}>
-            <div className="flex items-center justify-center">
-              <span className="text-5xl mr-4">{styles.emoji}</span>
-              <span className={`text-3xl font-bold ${styles.textColor}`}>{styles.label}</span>
-            </div>
-          </div>
-          <SentimentDonutChart distribution={percentDistribution} />
-        </div>
-        <p className="text-xs text-gray-500 text-center col-span-1 md:col-span-2 pt-4 mt-4 border-t border-gray-700/50">
-          Overall sentiment is estimated by the AI model based on an analysis of all text data. The label is assigned to the highest percentage.
-        </p>
-      </div>
-    );
+
+    // Process Method-Aware Themes
+    if (analysisBySource && analysisBySource.length > 0) {
+      analysisBySource.forEach(source => {
+        const title = (source.sourceType || 'General').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) + " Findings";
+        createThemeSlides(source.themes, title);
+      });
+    } else if (themes && themes.length > 0) {
+      createThemeSlides(themes, "Key Themes");
+    }
+
+    pres.writeFile({ fileName: `SoWhatAI-Report-${new Date().toISOString().split('T')[0]}.pptx` });
   };
-
-  const NarrativeOverviewDisplay = ({ narrative }) => (
-    <div id="report-overview" className="p-5 rounded-lg border border-purple-500/20 bg-purple-900/20 backdrop-blur-sm scroll-mt-24">
-      <h3 className="text-xl font-semibold text-white mb-2">Overview</h3>
-      <p className="text-gray-300 leading-relaxed text-base">{narrative}</p>
-    </div>
-  );
-
-  const SoWhatDisplay = ({ actions }) =>
-    actions && actions.length > 0 && (
-      <div id="report-sowhat" className="p-5 rounded-lg border border-teal-500/20 bg-teal-900/20 backdrop-blur-sm scroll-mt-24">
-        <h3 className="text-xl font-semibold text-white mb-3">So What? (Actions & Recommendations)</h3>
-        <ul className="list-disc list-inside space-y-2 text-gray-300">
-          {actions.map((action, index) => (<li key={index}>{action}</li>))}
-        </ul>
-      </div>
-    );
-
-  const VerbatimQuotesDisplay = ({ quotes }) =>
-    quotes && quotes.length > 0 && (
-      <div id="report-quotes" className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm scroll-mt-24">
-        <h3 className="text-lg font-semibold text-white mb-3">Key Verbatim Quotes</h3>
-        <ul className="space-y-4">
-          {quotes.map((quote, index) => (
-            <li key={index}>
-              <blockquote className="relative p-4 text-xl italic border-l-4 bg-gray-900/70 text-gray-300 border-gray-600 quote">
-                <div className="stylistic-quote-mark" aria-hidden="true">&ldquo;</div>
-                <p className="mb-4">{quote}</p>
-              </blockquote>
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-
-  const QuantitativeAnalysisDisplay = ({ quantData }) => {
-    const [isOpen, setIsOpen] = useState(true);
-    if (!quantData || quantData.length === 0) return null;
-    return (
-      <div id="report-quantitative" className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm scroll-mt-24">
-        <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center">
-          <h3 className="text-lg font-semibold text-white">Quantitative Analysis</h3>
-          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-        {isOpen && (
-          <div className="mt-4 space-y-8">
-            {quantData.map(fileResult => (
-              <div key={fileResult.sourceFile}>
-                <h4 className="font-semibold text-gray-200 text-md border-b border-gray-700 pb-2 mb-4">From: {fileResult.sourceFile}</h4>
-                <div className="space-y-6">
-                  {fileResult.stats.map(stat => (
-                    <div key={stat.title}>
-                      <h5 className="font-semibold text-gray-300">{stat.title}</h5>
-                      <div className="grid grid-cols-3 gap-4 mt-2 text-center">
-                        {stat.error ? (
-                          <p className="col-span-3 text-sm text-red-400 bg-red-900/50 p-2 rounded-md">{stat.error}</p>
-                        ) : (
-                          <>
-                            <div className="bg-gray-700 p-2 rounded-md">
-                              <p className="text-sm text-gray-400">Mean</p>
-                              <p className="text-xl font-bold">{stat.mean ?? '-'}</p>
-                            </div>
-                            <div className="bg-gray-700 p-2 rounded-md">
-                              <p className="text-sm text-gray-400">Median</p>
-                              <p className="text-xl font-bold">{stat.median ?? '-'}</p>
-                            </div>
-                            <div className="bg-gray-700 p-2 rounded-md">
-                              <p className="text-sm text-gray-400">Mode</p>
-                              <p className="text-xl font-bold">{stat.mode ?? '-'}</p>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  {fileResult.categories.map(cat => (<CategoryChart key={cat.title} category={cat} />))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const formatSourceType = (type) => {
-    return (type || 'general').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  };
+  // === END STEP 6 ===
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-      
-      {/* === FIX: Added sticky classes to the column div === */}
       <div className="md:col-span-1 sticky top-24 self-start">
         <ReportSidebar results={results} />
       </div>
@@ -1211,12 +1108,22 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload, onUpdateResu
               Back to Data Set
             </button>
             <h2 className="text-2xl font-semibold text-white">Analysis Report</h2>
-            <button onClick={() => onDownload(reportRef)} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-green-600 hover:bg-green-700">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              Download Report
-            </button>
+            <div className="flex space-x-3">
+              {/* === STEP 6: Add PPTX Download Button === */}
+              <button onClick={handleDownloadDeck} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-[#EDC8FF] hover:bg-purple-200 text-black font-medium transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                </svg>
+                Download PPTX
+              </button>
+              {/* === END STEP 6 === */}
+              <button onClick={() => onDownload(reportRef)} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-green-600 hover:bg-green-700">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download PDF
+              </button>
+            </div>
           </div>
 
           <div className="space-y-6">
@@ -1230,7 +1137,6 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload, onUpdateResu
             
             {themes && themes.length > 0 && (
               <div id="report-themes-legacy" className="scroll-mt-24">
-                {/* === STEP 5: Pass editing props === */}
                 <ThematicAnalysisDisplay 
                   themes={themes} 
                   allResults={results}
@@ -1248,7 +1154,6 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload, onUpdateResu
                     <h2 className="text-2xl font-semibold text-white mb-4 border-b border-gray-700 pb-2 capitalize">
                       Findings from: {formatSourceType(sourceAnalysis.sourceType)}
                     </h2>
-                    {/* === STEP 5: Pass editing props === */}
                     <ThematicAnalysisDisplay 
                       themes={sourceAnalysis.themes}
                       allResults={results}
@@ -1269,7 +1174,6 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload, onUpdateResu
     </div>
   );
 };
-
 
 /* ---------------- Category Chart ---------------- */
 const CategoryChart = ({ category }) => {
@@ -1358,7 +1262,6 @@ const CategoryChart = ({ category }) => {
 };
 
 /* ---------------- Analysis Tool (orchestrator) ---------------- */
-// === STEP 5: Remove `onSavedProjectId` prop ===
 const AnalysisToolPage = ({ onNavigate, initialProjectId }) => {
   const [workflowStep, setWorkflowStep] = useState('upload');
   const [dataSet, setDataSet] = useState([]);
