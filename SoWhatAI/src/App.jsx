@@ -1381,7 +1381,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload, onUpdateResu
             </button>
             <h2 className="text-2xl font-semibold text-white">Analysis Report</h2>
             <div className="flex space-x-3">
-              <button onClick={handleDownloadDeck} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-[#EDC8FF] hover:bg-purple-200 text-black font-medium transition-colors">
+              <button onClick={handleDownloadDeck} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-green-600 hover:bg-green-700">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
                 </svg>
@@ -1723,10 +1723,12 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-black font-sans text-white relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-gray-900 via-black to-[#3C4142] -z-10"></div>
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-900/40 rounded-full filter blur-3xl opacity-50 animate-aurora-1 -z-10"></div>
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-teal-900/40 rounded-full filter blur-3xl opacity-50 animate-aurora-2 -z-10"></div>
+    <div className="min-h-screen bg-black font-sans text-white relative">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
+        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-gray-900 via-black to-[#3C4142]"></div>
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-900/40 rounded-full filter blur-3xl opacity-50 animate-aurora-1"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-teal-900/40 rounded-full filter blur-3xl opacity-50 animate-aurora-2"></div>
+      </div>
 
       <Header user={user} onLogout={handleLogout} onNavigate={handleNavigate} />
 
