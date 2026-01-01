@@ -1291,10 +1291,14 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload, onUpdateResu
       slide.background = { color: "FFFFFF" };
       slide.addText("Sentiment Overview", { x: 0.5, y: 0.5, fontSize: 24, bold: true, color: "363636" });
 
+      const valPos = Number(sentimentDistribution.positive || 0);
+      const valNeg = Number(sentimentDistribution.negative || 0);
+      const valNeu = Number(sentimentDistribution.neutral || 0);
+
       const chartData = [{
         name: "Sentiment",
         labels: ["Positive", "Negative", "Neutral"],
-        values: [sentimentDistribution.positive, sentimentDistribution.negative, sentimentDistribution.neutral]
+        values: [valPos, valNeg, valNeu]
       }];
       
       slide.addChart(pres.ChartType.doughnut, chartData, { 
@@ -1381,7 +1385,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload, onUpdateResu
             </button>
             <h2 className="text-2xl font-semibold text-white">Analysis Report</h2>
             <div className="flex space-x-3">
-              <button onClick={handleDownloadDeck} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-green-600 hover:bg-green-700">
+              <button onClick={handleDownloadDeck} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-green-600 hover:bg-green-700 font-medium transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
                 </svg>
