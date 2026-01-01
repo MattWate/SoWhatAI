@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from './supabaseClient.js';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import PptxGenJS from 'pptxgenjs'; // <--- NEW IMPORT
+import PptxGenJS from 'pptxgenjs';
 
 /* =========================================================
   Supabase helpers (CRUD)
@@ -652,7 +652,276 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
   );
 };
 
-/* ---------------- Report Step ---------------- */
+/* ---------------- Category Chart ---------------- */
+const CategoryChart = ({ category }) => {
+  const [chartType, setChartType] = useState('donut'); // donut, bar, table
+  const total = category.data.reduce((sum, item) => sum + item.count, 0);
+  const colors = ['#13BBAF', '#EDC8FF', '#84cc16', '#f97316', '#3b82f6'];
+
+  const renderChart = () => {
+    switch (chartType) {
+      case 'bar': {
+        const maxCount = Math.max(...category.data.map(i => i.count));
+        return (
+          <div className="mt-2 space-y-2">
+            {category.data.map((item, index) => (
+              <div key={item.name} className="flex items-center">
+                <span className="w-24 text-sm text-gray-400 truncate">{item.name}</span>
+                <div className="flex-1 bg-gray-700 rounded-full h-5">
+                  <div className="h-5 rounded-full" style={{ width: `${(item.count / maxCount) * 100}%`, backgroundColor: colors[index % colors.length] }}></div>
+                </div>
+                <span className="ml-2 text-sm font-semibold">{item.count}</span>
+              </div>
+            ))}
+          </div>
+        );
+      }
+      case 'table':
+        return (
+          <table className="w-full mt-2 text-sm text-left">
+            <thead className="text-xs text-gray-400 uppercase bg-gray-700/50">
+              <tr><th className="px-4 py-2">Category</th><th className="px-4 py-2">Count</th><th className="px-4 py-2">Percentage</th></tr>
+            </thead>
+            <tbody>
+              {category.data.map((item) => (
+                <tr key={item.name} className="border-b border-gray-700">
+                  <td className="px-4 py-2">{item.name}</td>
+                  <td className="px-4 py-2">{item.count}</td>
+                  <td className="px-4 py-2">{((item.count / total) * 100).toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        );
+      case 'donut':
+      default: {
+        let accumulated = 0;
+        const conicGradient = category.data.map((item, index) => {
+          const percentage = (item.count / total) * 100;
+          const color = colors[index % colors.length];
+          const start = accumulated;
+          accumulated += percentage;
+          const end = accumulated;
+          return `${color} ${start}% ${end}%`;
+        }).join(', ');
+        return (
+          <div className="flex flex-col items-center">
+            <div style={{ background: `conic-gradient(${conicGradient})` }} className="w-32 h-32 rounded-full flex items-center justify-center">
+              <div className="w-20 h-20 bg-gray-800 rounded-full"></div>
+            </div>
+            <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-4 text-sm">
+              {category.data.map((item, index) => (
+                <div key={item.name} className="flex items-center">
+                  <span className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: colors[index % colors.length] }}></span>
+                  {item.name} ({item.count})
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex justify-between items-center">
+        <h5 className="font-semibold text-gray-300">{category.title}</h5>
+        <div className="flex space-x-1 bg-gray-700 p-1 rounded-md">
+          <button onClick={() => setChartType('donut')} className={`px-2 py-1 text-xs rounded ${chartType === 'donut' ? 'bg-teal-500 text-white' : 'text-gray-400'}`}>Donut</button>
+          <button onClick={() => setChartType('bar')} className={`px-2 py-1 text-xs rounded ${chartType === 'bar' ? 'bg-teal-500 text-white' : 'text-gray-400'}`}>Bar</button>
+          <button onClick={() => setChartType('table')} className={`px-2 py-1 text-xs rounded ${chartType === 'table' ? 'bg-teal-500 text-white' : 'text-gray-400'}`}>Table</button>
+        </div>
+      </div>
+      {renderChart()}
+    </div>
+  );
+};
+
+/* ---------------- Report Components (Restored) ---------------- */
+
+const DataSetOverview = ({ dataSet: ds }) => {
+  const textFilesCount = ds.filter(f => f.type === 'text').length;
+  const spreadsheets = ds.filter(f => f.type === 'spreadsheet');
+  const spreadsheetRowsCount = spreadsheets.reduce((acc, file) => acc + (file.rows?.length || 0), 0);
+
+  return (
+    <div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm mb-6">
+      <h3 className="text-lg font-semibold text-white mb-3">Data Set Overview</h3>
+      <div className="flex space-x-8">
+        {textFilesCount > 0 && (
+          <div className="flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <div>
+              <p className="text-2xl font-bold text-white">{textFilesCount}</p>
+              <p className="text-sm text-gray-400">Text Documents</p>
+            </div>
+          </div>
+        )}
+        {spreadsheets.length > 0 && (
+          <div className="flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#13BBAF] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <div>
+              <p className="text-2xl font-bold text-white">{spreadsheetRowsCount}</p>
+              <p className="text-sm text-gray-400">Survey Responses</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const ResearchQuestionDisplay = ({ question }) => (
+  <div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm mb-6">
+    <h3 className="text-lg font-semibold text-white">Research Question</h3>
+    <p className="mt-2 text-gray-300 italic">"{question}"</p>
+  </div>
+);
+
+const SentimentDonutChart = ({ distribution }) => {
+  if (!distribution) return null;
+  const { positive, negative, neutral } = distribution;
+  const conicGradient = `conic-gradient(#ef4444 0% ${negative}%, #84cc16 ${negative}% ${negative + positive}%, #9ca3af ${negative + positive}% 100%)`;
+  
+  return (
+    <div className="flex flex-col items-center">
+      <div style={{ background: conicGradient }} className="w-32 h-32 rounded-full flex items-center justify-center">
+        <div className="w-20 h-20 bg-[#1f2937] rounded-full"></div>
+      </div>
+      <div className="flex justify-center space-x-4 mt-4 text-sm text-gray-300">
+        <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-red-500 mr-2"></span>Neg ({negative}%)</div>
+        <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-lime-500 mr-2"></span>Pos ({positive}%)</div>
+        <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-gray-400 mr-2"></span>Neu ({neutral}%)</div>
+      </div>
+    </div>
+  );
+};
+
+const SentimentSection = ({ distribution }) => {
+  if (!distribution) return null;
+  const { positive, negative, neutral } = distribution;
+  let label = 'Neutral';
+  let emoji = '😐';
+  let colorClass = 'text-gray-300';
+  let bgClass = 'bg-gray-700';
+  let borderClass = 'border-gray-600';
+
+  if (positive > negative && positive > neutral) {
+    label = 'Positive'; emoji = '🙂'; colorClass = 'text-green-400'; bgClass = 'bg-green-900/30'; borderClass = 'border-green-500/30';
+  } else if (negative > positive && negative > neutral) {
+    label = 'Negative'; emoji = '😞'; colorClass = 'text-red-400'; bgClass = 'bg-red-900/30'; borderClass = 'border-red-500/30';
+  }
+
+  return (
+    <div id="report-sentiment" className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm scroll-mt-24">
+      <h3 className="text-lg font-semibold text-white mb-4 text-center">Overall Sentiment</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+        <div className={`p-6 rounded-lg border ${borderClass} ${bgClass} flex flex-col items-center justify-center`}>
+          <span className="text-6xl mb-2">{emoji}</span>
+          <span className={`text-3xl font-bold ${colorClass}`}>{label}</span>
+        </div>
+        <SentimentDonutChart distribution={distribution} />
+      </div>
+    </div>
+  );
+};
+
+const NarrativeOverviewDisplay = ({ narrative }) => (
+  <div id="report-overview" className="p-5 rounded-lg border border-purple-500/20 bg-purple-900/20 backdrop-blur-sm scroll-mt-24">
+    <h3 className="text-xl font-semibold text-white mb-2">Overview</h3>
+    <p className="text-gray-300 leading-relaxed text-base">{narrative}</p>
+  </div>
+);
+
+const SoWhatDisplay = ({ actions }) => (
+  actions && actions.length > 0 ? (
+    <div id="report-sowhat" className="p-5 rounded-lg border border-teal-500/20 bg-teal-900/20 backdrop-blur-sm scroll-mt-24">
+      <h3 className="text-xl font-semibold text-white mb-3">So What? (Actions)</h3>
+      <ul className="list-disc list-inside space-y-2 text-gray-300">
+        {actions.map((action, index) => (<li key={index}>{action}</li>))}
+      </ul>
+    </div>
+  ) : null
+);
+
+const VerbatimQuotesDisplay = ({ quotes }) => (
+  quotes && quotes.length > 0 ? (
+    <div id="report-quotes" className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm scroll-mt-24">
+      <h3 className="text-lg font-semibold text-white mb-3">Key Verbatim Quotes</h3>
+      <ul className="space-y-4">
+        {quotes.map((quote, index) => (
+          <li key={index}>
+            <blockquote className="relative p-4 text-lg italic border-l-4 bg-gray-900/70 text-gray-300 border-gray-600 quote">
+              <span className="text-3xl text-gray-500 absolute top-2 left-2 opacity-50">“</span>
+              <p className="pl-6 mb-0">{quote}</p>
+            </blockquote>
+          </li>
+        ))}
+      </ul>
+    </div>
+  ) : null
+);
+
+const QuantitativeAnalysisDisplay = ({ quantData }) => {
+  const [isOpen, setIsOpen] = useState(true);
+  if (!quantData || quantData.length === 0) return null;
+
+  return (
+    <div id="report-quantitative" className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 backdrop-blur-sm scroll-mt-24">
+      <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center">
+        <h3 className="text-lg font-semibold text-white">Quantitative Analysis</h3>
+        <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {isOpen && (
+        <div className="mt-4 space-y-8">
+          {quantData.map((fileResult, idx) => (
+            <div key={idx}>
+              <h4 className="font-semibold text-gray-200 text-md border-b border-gray-700 pb-2 mb-4">
+                Source: {fileResult.sourceFile}
+              </h4>
+              <div className="space-y-6">
+                {/* Stats */}
+                {fileResult.stats && fileResult.stats.map(stat => (
+                  <div key={stat.title}>
+                    <h5 className="font-semibold text-gray-300">{stat.title}</h5>
+                    <div className="grid grid-cols-3 gap-4 mt-2 text-center">
+                      <div className="bg-gray-700 p-2 rounded-md">
+                        <p className="text-xs text-gray-400 uppercase">Mean</p>
+                        <p className="text-xl font-bold text-white">{stat.mean ?? '-'}</p>
+                      </div>
+                      <div className="bg-gray-700 p-2 rounded-md">
+                        <p className="text-xs text-gray-400 uppercase">Median</p>
+                        <p className="text-xl font-bold text-white">{stat.median ?? '-'}</p>
+                      </div>
+                      <div className="bg-gray-700 p-2 rounded-md">
+                        <p className="text-xs text-gray-400 uppercase">Mode</p>
+                        <p className="text-xl font-bold text-white">{stat.mode ?? '-'}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                
+                {/* Categories */}
+                {fileResult.categories && fileResult.categories.map(cat => (
+                  <CategoryChart key={cat.title} category={cat} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ---------------- Report Step (Main) ---------------- */
 
 const ThematicAnalysisDisplay = ({
   themes = [],
@@ -982,7 +1251,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload, onUpdateResu
     verbatimQuotes, quantitativeResults, researchQuestion, soWhatActions
   } = results;
 
-  // === STEP 6: Generate Native PowerPoint ===
+  // === PPTX Generate Native PowerPoint ===
   const handleDownloadDeck = async () => {
     const pres = new PptxGenJS();
     
@@ -1090,7 +1359,7 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload, onUpdateResu
 
     pres.writeFile({ fileName: `SoWhatAI-Report-${new Date().toISOString().split('T')[0]}.pptx` });
   };
-  // === END STEP 6 ===
+  // === END PPTX ===
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -1109,14 +1378,12 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload, onUpdateResu
             </button>
             <h2 className="text-2xl font-semibold text-white">Analysis Report</h2>
             <div className="flex space-x-3">
-              {/* === STEP 6: Add PPTX Download Button === */}
               <button onClick={handleDownloadDeck} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-[#EDC8FF] hover:bg-purple-200 text-black font-medium transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
                 </svg>
                 Download PPTX
               </button>
-              {/* === END STEP 6 === */}
               <button onClick={() => onDownload(reportRef)} className="inline-flex items-center px-4 py-2 text-sm rounded-md text-white bg-green-600 hover:bg-green-700">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -1175,92 +1442,6 @@ const AnalysisReportPage = ({ dataSet, onBack, results, onDownload, onUpdateResu
   );
 };
 
-/* ---------------- Category Chart ---------------- */
-const CategoryChart = ({ category }) => {
-  const [chartType, setChartType] = useState('donut'); // donut, bar, table
-  const total = category.data.reduce((sum, item) => sum + item.count, 0);
-  const colors = ['#13BBAF', '#EDC8FF', '#84cc16', '#f97316', '#3b82f6'];
-
-  const renderChart = () => {
-    switch (chartType) {
-      case 'bar': {
-        const maxCount = Math.max(...category.data.map(i => i.count));
-        return (
-          <div className="mt-2 space-y-2">
-            {category.data.map((item, index) => (
-              <div key={item.name} className="flex items-center">
-                <span className="w-24 text-sm text-gray-400 truncate">{item.name}</span>
-                <div className="flex-1 bg-gray-700 rounded-full h-5">
-                  <div className="h-5 rounded-full" style={{ width: `${(item.count / maxCount) * 100}%`, backgroundColor: colors[index % colors.length] }}></div>
-                </div>
-                <span className="ml-2 text-sm font-semibold">{item.count}</span>
-              </div>
-            ))}
-          </div>
-        );
-      }
-      case 'table':
-        return (
-          <table className="w-full mt-2 text-sm text-left">
-            <thead className="text-xs text-gray-400 uppercase bg-gray-700/50">
-              <tr><th className="px-4 py-2">Category</th><th className="px-4 py-2">Count</th><th className="px-4 py-2">Percentage</th></tr>
-            </thead>
-            <tbody>
-              {category.data.map((item) => (
-                <tr key={item.name} className="border-b border-gray-700">
-                  <td className="px-4 py-2">{item.name}</td>
-                  <td className="px-4 py-2">{item.count}</td>
-                  <td className="px-4 py-2">{((item.count / total) * 100).toFixed(1)}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        );
-      case 'donut':
-      default: {
-        let accumulated = 0;
-        const conicGradient = category.data.map((item, index) => {
-          const percentage = (item.count / total) * 100;
-          const color = colors[index % colors.length];
-          const start = accumulated;
-          accumulated += percentage;
-          const end = accumulated;
-          return `${color} ${start}% ${end}%`;
-        }).join(', ');
-        return (
-          <div className="flex flex-col items-center">
-            <div style={{ background: `conic-gradient(${conicGradient})` }} className="w-32 h-32 rounded-full flex items-center justify-center">
-              <div className="w-20 h-20 bg-gray-800 rounded-full"></div>
-            </div>
-            <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-4 text-sm">
-              {category.data.map((item, index) => (
-                <div key={item.name} className="flex items-center">
-                  <span className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: colors[index % colors.length] }}></span>
-                  {item.name} ({item.count})
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      }
-    }
-  };
-
-  return (
-    <div>
-      <div className="flex justify-between items-center">
-        <h5 className="font-semibold text-gray-300">{category.title}</h5>
-        <div className="flex space-x-1 bg-gray-700 p-1 rounded-md">
-          <button onClick={() => setChartType('donut')} className={`px-2 py-1 text-xs rounded ${chartType === 'donut' ? 'bg-teal-500 text-white' : 'text-gray-400'}`}>Donut</button>
-          <button onClick={() => setChartType('bar')} className={`px-2 py-1 text-xs rounded ${chartType === 'bar' ? 'bg-teal-500 text-white' : 'text-gray-400'}`}>Bar</button>
-          <button onClick={() => setChartType('table')} className={`px-2 py-1 text-xs rounded ${chartType === 'table' ? 'bg-teal-500 text-white' : 'text-gray-400'}`}>Table</button>
-        </div>
-      </div>
-      {renderChart()}
-    </div>
-  );
-};
-
 /* ---------------- Analysis Tool (orchestrator) ---------------- */
 const AnalysisToolPage = ({ onNavigate, initialProjectId }) => {
   const [workflowStep, setWorkflowStep] = useState('upload');
@@ -1269,7 +1450,6 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // === STEP 5: Add state for currentProjectId ===
   const [currentProjectId, setCurrentProjectId] = useState(null);
   
   useEffect(() => {
@@ -1277,7 +1457,6 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId }) => {
       setCurrentProjectId(initialProjectId);
     }
   }, [initialProjectId]);
-  // === END STEP 5 ===
 
   useEffect(() => {
     (async () => {
@@ -1361,7 +1540,6 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId }) => {
         reportConfig
       });
       
-      // === STEP 5: Pass the lightweight dataSet into the results object ===
       const dataSetForSaving = dataSet.map(f => ({ 
         name: f.name, 
         type: f.type, 
@@ -1374,12 +1552,9 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId }) => {
       };
       
       setAnalysisResults(fullResults);
-      // === END STEP 5 ===
-      
       setWorkflowStep('report');
 
       try {
-        // === STEP 5: Use internal `currentProjectId` state ===
         if (currentProjectId) {
           await updateProject({
             id: currentProjectId,
@@ -1390,9 +1565,8 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId }) => {
             name: researchQuestion?.slice(0, 60) || `Project ${new Date().toLocaleString()}`,
             analysis_report: fullResults
           });
-          setCurrentProjectId(created.id); // <-- Set the ID for future edits
+          setCurrentProjectId(created.id);
         }
-        // === END STEP 5 ===
       } catch (persistErr) {
         console.error('Project save failed:', persistErr);
       }
@@ -1482,10 +1656,8 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId }) => {
           results={analysisResults}
           onBack={handleBackToConfig}
           onDownload={handleDownloadReport}
-          // === STEP 5: Pass state setters down ===
           onUpdateResults={setAnalysisResults}
           projectId={currentProjectId}
-          // === END STEP 5 ===
         />
       );
     case 'upload':
@@ -1507,8 +1679,6 @@ export default function App() {
   const [page, setPage] = useState('home');
   const [openingProjectId, setOpeningProjectId] = useState(null);
   
-  // === STEP 5: Removed `currentProjectId` state from App ===
-
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUser = session?.user ?? null;
@@ -1534,7 +1704,7 @@ export default function App() {
 
   const handleNavigate = (destination) => {
     if (destination === 'app') {
-      setOpeningProjectId(null); // Clear any open project when navigating to "new project"
+      setOpeningProjectId(null);
     }
     
     if (!user && (destination === 'app' || destination === 'dashboard')) {
