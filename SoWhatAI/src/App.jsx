@@ -75,6 +75,13 @@ async function callAnalyze({ textSources, quantitativeData, researchQuestion, re
 }
 
 /* =========================================================
+  Helper Utilities
+  ========================================================= */
+const formatSourceType = (type) => {
+  return (type || 'general').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+};
+
+/* =========================================================
   UI Components
   ========================================================= */
 
@@ -1169,10 +1176,6 @@ const ReportSidebar = ({ results }) => {
     sentimentDistribution, verbatimQuotes, quantitativeResults,
     soWhatActions
   } = results;
-
-  const formatSourceType = (type) => {
-    return (type || 'general').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  };
 
   return (
     <nav className="self-start">
