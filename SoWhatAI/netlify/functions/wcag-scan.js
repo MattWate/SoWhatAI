@@ -86,6 +86,7 @@ export const handler = async (event, context) => {
     return json(200, {
       status: 'partial',
       message: 'Unexpected runtime error. Returning empty partial result.',
+      service: 'LumenScan',
       mode,
       startedAt: now,
       finishedAt: now,

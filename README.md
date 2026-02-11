@@ -10,7 +10,7 @@ The app now includes a WCAG scanning page at `/wcag-scan`.
 3. Choose `Single page` or `Crawl` mode.
 4. Run the scan to view summary, per-page issues, and rule-level details.
 
-The scan runs through `POST /.netlify/functions/wcag-scan` using Playwright + axe-core and supports optional screenshot markers for issue pinpointing.
+The scan runs through `POST /.netlify/functions/wcag-scan` using Playwright + the in-house `LumenScan` rules engine and supports optional screenshot markers for issue pinpointing.
 
 ### Limitations and Manual Verification
 

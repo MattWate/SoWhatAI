@@ -142,9 +142,7 @@ function dedupeIssueList(issues) {
 function IssueCard({ issue, screenshot, status, onStatusChange }) {
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [expanded, setExpanded] = useState(false);
-  const dequeRuleUrl = issue?.ruleId
-    ? `https://dequeuniversity.com/rules/axe/4.10/${encodeURIComponent(issue.ruleId)}`
-    : '';
+  const wcagGuidanceUrl = issue?.ruleId ? 'https://www.w3.org/WAI/standards-guidelines/wcag/' : '';
   const hasBox =
     issue?.bbox &&
     Number.isFinite(issue.bbox.x) &&
@@ -197,15 +195,15 @@ function IssueCard({ issue, screenshot, status, onStatusChange }) {
             {issue.htmlSnippet || 'No HTML snippet provided.'}
           </pre>
           {issue.failureSummary ? <p className="text-xs text-gray-300">{issue.failureSummary}</p> : null}
-          {dequeRuleUrl ? (
+          {wcagGuidanceUrl ? (
             <p className="text-xs">
               <a
-                href={dequeRuleUrl}
+                href={wcagGuidanceUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="text-teal-300 hover:text-teal-200 underline"
               >
-                Open Deque rule guidance
+                Open WCAG guidance
               </a>
             </p>
           ) : null}

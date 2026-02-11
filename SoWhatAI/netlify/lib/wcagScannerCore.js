@@ -1,8 +1,6 @@
 import chromium from '@sparticuz/chromium';
 import { chromium as playwrightChromium } from 'playwright-core';
-import AxePlaywright from '@axe-core/playwright';
-
-const AxeBuilder = AxePlaywright.default ?? AxePlaywright;
+import { SCAN_ENGINE_NAME, collectEngineViolations, selectEngineRules } from './lumenRuleEngine.js';
 
 const MAX_TIMEOUT_MS = 45000;
 const DEFAULT_SINGLE_TIMEOUT_MS = 28000;
@@ -28,7 +26,7 @@ const MAX_SELECTOR_LENGTH = 220;
 const DEFAULT_PAGE_SCAN_BUDGET_MS = 12000;
 const MIN_TIME_TO_START_NEW_PAGE_MS = 2200;
 const LOAD_STATE_CAP_MS = 5000;
-const DEFAULT_AXE_TIMEOUT_MS = 8000;
+const DEFAULT_ENGINE_TIMEOUT_MS = 8000;
 const SCREENSHOT_CAPTURE_BUDGET_MS = 3500;
 
 const DEFAULT_RULESET = 'wcag22aa';
@@ -86,7 +84,7 @@ function normalizeRuleset(value) {
   return RULESET_TAGS[normalized] ? normalized : DEFAULT_RULESET;
 }
 
-function buildAxeTags(ruleset, includeBestPractices, includeExperimental) {
+function buildProfileTags(ruleset, includeBestPractices, includeExperimental) {
   const base = RULESET_TAGS[ruleset] || RULESET_TAGS[DEFAULT_RULESET];
   const tags = [...base];
   if (includeBestPractices) tags.push('best-practice');
@@ -198,7 +196,9 @@ function sanitizeScopeSelectors(value) {
 }
 
 function getWcagRefs(tags = []) {
-  return tags.filter((tag) => /^wcag\d+/i.test(tag) || /^wcag2\d{2}$/i.test(tag)).slice(0, 8);
+  return tags
+    .filter((tag) => /^wcag(?:\d{3,4}|2a|2aa|21aa|22aa)$/i.test(String(tag || '')))
+    .slice(0, 8);
 }
 
 function createTimeBudget(timeoutMs, mode) {
@@ -518,12 +518,14 @@ function buildOptions(input) {
   const ruleset = normalizeRuleset(input.ruleset);
   const includeBestPractices = Boolean(input.includeBestPractices);
   const includeExperimental = Boolean(input.includeExperimental);
+  const profileTags = buildProfileTags(ruleset, includeBestPractices, includeExperimental);
   return {
     mode,
     ruleset,
     includeBestPractices,
     includeExperimental,
-    axeTags: buildAxeTags(ruleset, includeBestPractices, includeExperimental),
+    profileTags,
+    engineRules: selectEngineRules(profileTags),
     scope: {
       includeSelectors: sanitizeScopeSelectors(input.includeSelectors),
       excludeSelectors: sanitizeScopeSelectors(input.excludeSelectors)
@@ -563,7 +565,7 @@ async function scanPage({
   mode,
   startOrigin,
   includeBbox,
-  axeTags,
+  engineRules,
   scope,
   caps,
   timeBudget
@@ -572,7 +574,7 @@ async function scanPage({
   let page = null;
   const timings = {
     navigationMs: 0,
-    axeMs: 0
+    engineMs: 0
   };
 
   try {
@@ -594,25 +596,30 @@ async function scanPage({
       } catch {}
       timings.navigationMs = Date.now() - navStart;
 
-      const axeStart = Date.now();
-      const axeTimeout = Math.max(1200, Math.min(DEFAULT_AXE_TIMEOUT_MS, timeBudget.remainingMs() - 300));
-      let builder = new AxeBuilder({ page }).withTags(axeTags);
-      for (const selector of scope.includeSelectors) {
-        builder = builder.include(selector);
-      }
-      for (const selector of scope.excludeSelectors) {
-        builder = builder.exclude(selector);
-      }
-      const axe = await withTimeout(
-        builder.analyze(),
-        axeTimeout,
-        'AXE_TIMEOUT',
-        `Axe analysis timed out after ${axeTimeout}ms`
+      const engineStart = Date.now();
+      const engineTimeout = Math.max(
+        1200,
+        Math.min(DEFAULT_ENGINE_TIMEOUT_MS, timeBudget.remainingMs() - 300)
       );
-      timings.axeMs = Date.now() - axeStart;
+      const engineResult = await withTimeout(
+        collectEngineViolations(page, {
+          engineRules,
+          includeSelectors: scope.includeSelectors,
+          excludeSelectors: scope.excludeSelectors,
+          maxNodeSamples: Math.max(caps.maxNodesPerViolation, caps.maxNodesPerViolation * 3),
+          maxHtmlSnippetLength: MAX_HTML_SNIPPET_LENGTH,
+          maxFailureSummaryLength: MAX_FAILURE_SUMMARY_LENGTH
+        }),
+        engineTimeout,
+        'ENGINE_TIMEOUT',
+        `${SCAN_ENGINE_NAME} analysis timed out after ${engineTimeout}ms`
+      );
+      timings.engineMs = Date.now() - engineStart;
 
       const heuristics = await runHeuristics(page);
-      const violations = Array.isArray(axe.violations) ? [...axe.violations].sort(compareViolations) : [];
+      const violations = Array.isArray(engineResult.violations)
+        ? [...engineResult.violations].sort(compareViolations)
+        : [];
 
       const pageTruncatedBy = {
         violations: violations.length > caps.maxViolationsPerPage,
@@ -671,7 +678,7 @@ async function scanPage({
     };
   } catch (error) {
     const status =
-      error?.code === 'PAGE_TIMEOUT' || error?.code === 'AXE_TIMEOUT' ? 'timeout' : 'error';
+      error?.code === 'PAGE_TIMEOUT' || error?.code === 'ENGINE_TIMEOUT' ? 'timeout' : 'error';
     return {
       status,
       issues: [],
@@ -699,6 +706,7 @@ async function runWcagScan(input) {
     return {
       status: 'partial',
       message: 'Invalid start URL. Returning empty partial result.',
+      service: SCAN_ENGINE_NAME,
       mode: options.mode,
       startedAt: new Date(timeBudget.startedAtMs).toISOString(),
       finishedAt: new Date().toISOString(),
@@ -717,9 +725,13 @@ async function runWcagScan(input) {
         truncation: { timeBudget: false, maxPages: false, maxTotalIssues: false },
         errorsSummary: { totalErrors: 1, totalTimeouts: 0, messages: ['Invalid start URL'] },
         caps: options.caps,
+        engine: {
+          name: SCAN_ENGINE_NAME,
+          activeRuleCount: options.engineRules.length
+        },
         standards: {
           ruleset: options.ruleset,
-          tags: options.axeTags,
+          tags: options.profileTags,
           includeBestPractices: options.includeBestPractices,
           includeExperimental: options.includeExperimental
         },
@@ -799,7 +811,7 @@ async function runWcagScan(input) {
         mode: options.mode,
         startOrigin,
         includeBbox: true,
-        axeTags: options.axeTags,
+        engineRules: options.engineRules,
         scope: options.scope,
         caps: options.caps,
         timeBudget
@@ -855,7 +867,7 @@ async function runWcagScan(input) {
           status: pageResult.status,
           durationMs: pageResult.durationMs,
           navigationMs: pageResult.timings.navigationMs,
-          axeMs: pageResult.timings.axeMs,
+          engineMs: pageResult.timings.engineMs,
           issueCount: acceptedIssues.length
         });
       }
@@ -952,6 +964,7 @@ async function runWcagScan(input) {
   const response = {
     status,
     message,
+    service: SCAN_ENGINE_NAME,
     mode: options.mode,
     startedAt,
     finishedAt,
@@ -996,9 +1009,13 @@ async function runWcagScan(input) {
         maxScreenshots: MAX_SCREENSHOTS
       },
       caps: options.caps,
+      engine: {
+        name: SCAN_ENGINE_NAME,
+        activeRuleCount: options.engineRules.length
+      },
       standards: {
         ruleset: options.ruleset,
-        tags: options.axeTags,
+        tags: options.profileTags,
         includeBestPractices: options.includeBestPractices,
         includeExperimental: options.includeExperimental
       },
