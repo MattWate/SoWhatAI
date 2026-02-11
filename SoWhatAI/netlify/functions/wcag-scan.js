@@ -1,4 +1,4 @@
-const { runWcagScan } = require('./wcagScanner');
+import { runWcagScan } from './wcagScanner.js';
 
 function json(statusCode, body) {
   return {
@@ -10,7 +10,7 @@ function json(statusCode, body) {
   };
 }
 
-exports.handler = async (event, context) => {
+export const handler = async (event, context) => {
   if (event.httpMethod !== 'POST') {
     return json(405, { error: 'Method Not Allowed' });
   }
@@ -33,7 +33,12 @@ exports.handler = async (event, context) => {
     blockImages,
     maxViolationsPerPage,
     maxNodesPerViolation,
-    maxTotalIssuesOverall
+    maxTotalIssuesOverall,
+    ruleset,
+    includeBestPractices,
+    includeExperimental,
+    includeSelectors,
+    excludeSelectors
   } = body;
 
   if (!startUrl || typeof startUrl !== 'string') {
@@ -65,7 +70,12 @@ exports.handler = async (event, context) => {
       blockImages,
       maxViolationsPerPage,
       maxNodesPerViolation,
-      maxTotalIssuesOverall
+      maxTotalIssuesOverall,
+      ruleset,
+      includeBestPractices,
+      includeExperimental,
+      includeSelectors,
+      excludeSelectors
     });
 
     return json(200, result);
@@ -100,6 +110,16 @@ exports.handler = async (event, context) => {
           totalErrors: 1,
           totalTimeouts: 0,
           messages: [error.message || String(error)]
+        },
+        standards: {
+          ruleset: ruleset || 'wcag22aa',
+          tags: [],
+          includeBestPractices: Boolean(includeBestPractices),
+          includeExperimental: Boolean(includeExperimental)
+        },
+        scope: {
+          includeSelectors: Array.isArray(includeSelectors) ? includeSelectors : [],
+          excludeSelectors: Array.isArray(excludeSelectors) ? excludeSelectors : []
         }
       }
     });

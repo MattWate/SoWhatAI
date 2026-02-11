@@ -2,8 +2,18 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { runWcagScan } from './api.js';
 
 const IMPACT_ORDER = ['critical', 'serious', 'moderate', 'minor'];
+const ISSUE_STATUSES = ['open', 'in_progress', 'resolved', 'accepted_risk'];
+const RULESET_OPTIONS = [
+  { value: 'wcag2a', label: 'WCAG 2.0 A' },
+  { value: 'wcag2aa', label: 'WCAG 2.0 AA' },
+  { value: 'wcag21aa', label: 'WCAG 2.1 AA' },
+  { value: 'wcag22aa', label: 'WCAG 2.2 AA' },
+  { value: 'section508', label: 'Section 508' }
+];
 const INITIAL_VISIBLE_ISSUES = 30;
 const ISSUE_PAGE_SIZE = 30;
+const RUN_HISTORY_STORAGE_KEY = 'wcagScan.runHistory.v1';
+const ISSUE_STATUS_STORAGE_KEY = 'wcagScan.issueStatus.v1';
 
 function isValidHttpUrl(value) {
   try {
@@ -30,9 +40,111 @@ function formatDuration(ms) {
   return `${numeric} ms`;
 }
 
-function IssueCard({ issue, screenshot }) {
+function loadJsonStorage(key, fallback) {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function getIssueKey(issue) {
+  const selector = Array.isArray(issue?.targetSelectors) && issue.targetSelectors.length > 0
+    ? issue.targetSelectors[0]
+    : 'no-selector';
+  return `${issue?.pageUrl || 'unknown'}|${issue?.ruleId || 'unknown'}|${selector}`;
+}
+
+function formatStatusLabel(status) {
+  return status.replace(/_/g, ' ');
+}
+
+function summarizeRun(scanResult, scanUrl) {
+  const issues = scanResult?.issues || [];
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    createdAt: new Date().toISOString(),
+    scanUrl,
+    mode: scanResult?.mode || 'single',
+    ruleset: scanResult?.metadata?.standards?.ruleset || 'wcag22aa',
+    status: scanResult?.status || 'complete',
+    pagesCount: (scanResult?.pages || []).length,
+    issuesCount: issues.length,
+    durationMs: scanResult?.durationMs ?? scanResult?.elapsedMs ?? scanResult?.metadata?.durationMs ?? null,
+    impactCounts: {
+      critical: getImpactCount(issues, 'critical'),
+      serious: getImpactCount(issues, 'serious'),
+      moderate: getImpactCount(issues, 'moderate'),
+      minor: getImpactCount(issues, 'minor')
+    }
+  };
+}
+
+function buildCoverageSnapshot(scanResult) {
+  const pages = scanResult?.pages || [];
+  const issues = scanResult?.issues || [];
+  const pageIssueMap = new Map();
+  const wcagRefCounts = new Map();
+
+  pages.forEach((page) => pageIssueMap.set(page.url, 0));
+  issues.forEach((issue) => {
+    const pageUrl = issue.pageUrl || 'unknown';
+    pageIssueMap.set(pageUrl, (pageIssueMap.get(pageUrl) || 0) + 1);
+    (issue.wcagRefs || []).forEach((ref) => {
+      wcagRefCounts.set(ref, (wcagRefCounts.get(ref) || 0) + 1);
+    });
+  });
+
+  const pageRows = Array.from(pageIssueMap.entries()).map(([url, issueCount]) => ({
+    url,
+    issueCount,
+    pass: issueCount === 0
+  }));
+
+  const passCount = pageRows.filter((row) => row.pass).length;
+  return {
+    passRate: pageRows.length ? Math.round((passCount / pageRows.length) * 100) : 0,
+    pageRows: pageRows.sort((a, b) => b.issueCount - a.issueCount),
+    uniqueRules: new Set(issues.map((issue) => issue.ruleId).filter(Boolean)).size,
+    uniqueRefs: wcagRefCounts.size,
+    topRefs: Array.from(wcagRefCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10)
+  };
+}
+
+function parseSelectorInput(value) {
+  if (!value || typeof value !== 'string') return [];
+  return value
+    .split(/\r?\n|,/g)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function dedupeIssueList(issues) {
+  const seen = new Set();
+  const output = [];
+  for (const issue of issues) {
+    const selector = Array.isArray(issue?.targetSelectors) && issue.targetSelectors.length > 0
+      ? issue.targetSelectors[0]
+      : 'no-selector';
+    const key = `${issue?.pageUrl || ''}|${issue?.ruleId || ''}|${selector}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(issue);
+  }
+  return output;
+}
+
+function IssueCard({ issue, screenshot, status, onStatusChange }) {
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [expanded, setExpanded] = useState(false);
+  const dequeRuleUrl = issue?.ruleId
+    ? `https://dequeuniversity.com/rules/axe/4.10/${encodeURIComponent(issue.ruleId)}`
+    : '';
   const hasBox =
     issue?.bbox &&
     Number.isFinite(issue.bbox.x) &&
@@ -48,14 +160,30 @@ function IssueCard({ issue, screenshot }) {
             {issue.impact || 'unknown'}
           </span>
           <span className="text-sm font-semibold text-white">{issue.ruleId}</span>
+          <span className="text-xs font-medium capitalize rounded bg-gray-800 border border-gray-600 px-2 py-1 text-gray-200">
+            {formatStatusLabel(status)}
+          </span>
         </div>
-        <button
-          type="button"
-          onClick={() => setExpanded((prev) => !prev)}
-          className="text-xs px-2 py-1 rounded border border-gray-600 text-gray-300 hover:bg-gray-800"
-        >
-          {expanded ? 'Collapse' : 'Expand'}
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={status}
+            onChange={(event) => onStatusChange(event.target.value)}
+            className="text-xs px-2 py-1 rounded border border-gray-600 bg-gray-900 text-gray-300"
+          >
+            {ISSUE_STATUSES.map((value) => (
+              <option key={value} value={value}>
+                {formatStatusLabel(value)}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setExpanded((prev) => !prev)}
+            className="text-xs px-2 py-1 rounded border border-gray-600 text-gray-300 hover:bg-gray-800"
+          >
+            {expanded ? 'Collapse' : 'Expand'}
+          </button>
+        </div>
       </div>
       <div className="text-xs text-gray-300 break-all">
         Selectors: {issue.targetSelectors?.length ? issue.targetSelectors.join(' | ') : 'n/a'}
@@ -69,6 +197,18 @@ function IssueCard({ issue, screenshot }) {
             {issue.htmlSnippet || 'No HTML snippet provided.'}
           </pre>
           {issue.failureSummary ? <p className="text-xs text-gray-300">{issue.failureSummary}</p> : null}
+          {dequeRuleUrl ? (
+            <p className="text-xs">
+              <a
+                href={dequeRuleUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-teal-300 hover:text-teal-200 underline"
+              >
+                Open Deque rule guidance
+              </a>
+            </p>
+          ) : null}
           {screenshot?.dataUrl ? (
             <div className="space-y-2">
               <p className="text-xs text-gray-400">Screenshot marker</p>
@@ -121,6 +261,11 @@ function IssueCard({ issue, screenshot }) {
 export default function WcagScanPanel() {
   const [startUrl, setStartUrl] = useState('');
   const [mode, setMode] = useState('single');
+  const [ruleset, setRuleset] = useState('wcag22aa');
+  const [includeBestPractices, setIncludeBestPractices] = useState(false);
+  const [includeExperimental, setIncludeExperimental] = useState(false);
+  const [includeSelectorsInput, setIncludeSelectorsInput] = useState('');
+  const [excludeSelectorsInput, setExcludeSelectorsInput] = useState('');
   const [maxPages, setMaxPages] = useState(5);
   const [includeScreenshots, setIncludeScreenshots] = useState(false);
   const [timeoutMs, setTimeoutMs] = useState(30000);
@@ -130,6 +275,22 @@ export default function WcagScanPanel() {
   const [result, setResult] = useState(null);
   const [selectedPageUrl, setSelectedPageUrl] = useState('');
   const [visibleIssueCount, setVisibleIssueCount] = useState(INITIAL_VISIBLE_ISSUES);
+  const [impactFilter, setImpactFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [ruleFilter, setRuleFilter] = useState('');
+  const [dedupeIssuesEnabled, setDedupeIssuesEnabled] = useState(true);
+  const [runHistory, setRunHistory] = useState(() => loadJsonStorage(RUN_HISTORY_STORAGE_KEY, []));
+  const [issueStatusMap, setIssueStatusMap] = useState(() => loadJsonStorage(ISSUE_STATUS_STORAGE_KEY, {}));
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(RUN_HISTORY_STORAGE_KEY, JSON.stringify(runHistory.slice(0, 20)));
+  }, [runHistory]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(ISSUE_STATUS_STORAGE_KEY, JSON.stringify(issueStatusMap));
+  }, [issueStatusMap]);
 
   const urlError = useMemo(() => {
     if (!startUrl.trim()) return 'A URL is required.';
@@ -147,13 +308,30 @@ export default function WcagScanPanel() {
     return allIssues.filter((issue) => issue.pageUrl === selectedPageUrl);
   }, [allIssues, selectedPageUrl]);
 
+  const normalizedPageIssues = useMemo(() => {
+    return dedupeIssuesEnabled ? dedupeIssueList(pageIssues) : pageIssues;
+  }, [pageIssues, dedupeIssuesEnabled]);
+
+  const filteredIssues = useMemo(() => {
+    return normalizedPageIssues.filter((issue) => {
+      if (impactFilter !== 'all' && issue.impact !== impactFilter) return false;
+      const status = issueStatusMap[getIssueKey(issue)] || 'open';
+      if (statusFilter !== 'all' && status !== statusFilter) return false;
+      if (ruleFilter.trim()) {
+        const query = ruleFilter.trim().toLowerCase();
+        if (!String(issue.ruleId || '').toLowerCase().includes(query)) return false;
+      }
+      return true;
+    });
+  }, [normalizedPageIssues, impactFilter, statusFilter, ruleFilter, issueStatusMap]);
+
   useEffect(() => {
     setVisibleIssueCount(INITIAL_VISIBLE_ISSUES);
-  }, [selectedPageUrl, result]);
+  }, [selectedPageUrl, result, impactFilter, statusFilter, ruleFilter]);
 
   const visibleIssues = useMemo(() => {
-    return pageIssues.slice(0, visibleIssueCount);
-  }, [pageIssues, visibleIssueCount]);
+    return filteredIssues.slice(0, visibleIssueCount);
+  }, [filteredIssues, visibleIssueCount]);
 
   const screenshotsByPage = useMemo(() => {
     const map = new Map();
@@ -180,6 +358,11 @@ export default function WcagScanPanel() {
       const payload = {
         startUrl: startUrl.trim(),
         mode,
+        ruleset,
+        includeBestPractices,
+        includeExperimental,
+        includeSelectors: parseSelectorInput(includeSelectorsInput),
+        excludeSelectors: parseSelectorInput(excludeSelectorsInput),
         includeScreenshots,
         timeoutMs: Number(timeoutMs),
         debug
@@ -193,6 +376,7 @@ export default function WcagScanPanel() {
       if (scanResult?.pages?.length) {
         setSelectedPageUrl(scanResult.pages[0].url);
       }
+      setRunHistory((prev) => [summarizeRun(scanResult, startUrl.trim()), ...prev].slice(0, 20));
     } catch (scanError) {
       setError(scanError.message || 'Unable to run WCAG scan.');
     } finally {
@@ -200,15 +384,145 @@ export default function WcagScanPanel() {
     }
   };
 
+  const handleIssueStatusChange = (issue, nextStatus) => {
+    setIssueStatusMap((prev) => ({
+      ...prev,
+      [getIssueKey(issue)]: nextStatus
+    }));
+  };
+
+  const applyPreset = (preset) => {
+    if (preset === 'quick') {
+      setMode('single');
+      setRuleset('wcag2aa');
+      setIncludeBestPractices(false);
+      setIncludeExperimental(false);
+      setMaxPages(1);
+      setTimeoutMs(15000);
+      setIncludeScreenshots(false);
+      setDebug(false);
+    } else if (preset === 'balanced') {
+      setMode('crawl');
+      setRuleset('wcag21aa');
+      setIncludeBestPractices(false);
+      setIncludeExperimental(false);
+      setMaxPages(5);
+      setTimeoutMs(30000);
+      setIncludeScreenshots(false);
+      setDebug(false);
+    } else if (preset === 'deep') {
+      setMode('crawl');
+      setRuleset('wcag22aa');
+      setIncludeBestPractices(true);
+      setIncludeExperimental(true);
+      setMaxPages(10);
+      setTimeoutMs(45000);
+      setIncludeScreenshots(true);
+      setDebug(true);
+    }
+  };
+
+  const exportLatestRun = () => {
+    if (!result || typeof window === 'undefined') return;
+    const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `wcag-scan-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const exportIssuesCsv = () => {
+    if (!filteredIssues.length || typeof window === 'undefined') return;
+    const header = [
+      'pageUrl',
+      'ruleId',
+      'impact',
+      'status',
+      'wcagRefs',
+      'targetSelectors',
+      'failureSummary'
+    ];
+    const rows = filteredIssues.map((issue) => [
+      issue.pageUrl || '',
+      issue.ruleId || '',
+      issue.impact || '',
+      issueStatusMap[getIssueKey(issue)] || 'open',
+      Array.isArray(issue.wcagRefs) ? issue.wcagRefs.join('|') : '',
+      Array.isArray(issue.targetSelectors) ? issue.targetSelectors.join('|') : '',
+      String(issue.failureSummary || '').replace(/\s+/g, ' ').trim()
+    ]);
+
+    const escapeCsv = (value) => `"${String(value || '').replace(/\"/g, '""')}"`;
+    const csv = [header, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `wcag-issues-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+  };
+
   const selectedPage = pages.find((page) => page.url === selectedPageUrl);
   const durationText = formatDuration(result?.durationMs ?? metadata.durationMs ?? result?.elapsedMs);
+  const coverage = useMemo(() => buildCoverageSnapshot(result), [result]);
+  const standards = metadata?.standards || {};
+  const scanScope = metadata?.scope || {};
+  const automationPayload = useMemo(() => {
+    const payload = {
+      startUrl: startUrl.trim() || 'https://example.com',
+      mode,
+      ruleset,
+      includeBestPractices,
+      includeExperimental,
+      includeSelectors: parseSelectorInput(includeSelectorsInput),
+      excludeSelectors: parseSelectorInput(excludeSelectorsInput),
+      includeScreenshots,
+      timeoutMs: Number(timeoutMs),
+      debug
+    };
+    if (mode === 'crawl') payload.maxPages = clampMaxPages(maxPages);
+    return payload;
+  }, [
+    startUrl,
+    mode,
+    ruleset,
+    includeBestPractices,
+    includeExperimental,
+    includeSelectorsInput,
+    excludeSelectorsInput,
+    includeScreenshots,
+    timeoutMs,
+    debug,
+    maxPages
+  ]);
+
+  const issueStatusCounts = useMemo(() => {
+    const counts = { open: 0, in_progress: 0, resolved: 0, accepted_risk: 0 };
+    allIssues.forEach((issue) => {
+      const status = issueStatusMap[getIssueKey(issue)] || 'open';
+      if (counts[status] == null) {
+        counts.open += 1;
+      } else {
+        counts[status] += 1;
+      }
+    });
+    return counts;
+  }, [allIssues, issueStatusMap]);
+
+  const latestRun = runHistory[0] || null;
+  const previousRun = runHistory[1] || null;
+  const issuesDelta = latestRun && previousRun ? latestRun.issuesCount - previousRun.issuesCount : null;
 
   return (
     <div className="space-y-6">
       <div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-6">
-        <h2 className="text-2xl font-semibold text-white">WCAG Scan</h2>
+        <h2 className="text-2xl font-semibold text-white">WCAG QA Command Center</h2>
         <p className="text-sm text-gray-400">
-          Run automated accessibility checks (axe-core) with optional screenshot markers for pinpointing issues.
+          Run automated accessibility checks, triage findings, and track QA coverage over time.
         </p>
 
         <div className="space-y-4">
@@ -260,6 +574,24 @@ export default function WcagScanPanel() {
             </div>
 
             <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="wcag-ruleset-select">
+                Standards profile
+              </label>
+              <select
+                id="wcag-ruleset-select"
+                value={ruleset}
+                onChange={(event) => setRuleset(event.target.value)}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white shadow-sm focus:outline-none focus:ring-[#13BBAF] focus:border-[#13BBAF]"
+              >
+                {RULESET_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="wcag-timeout">
                 Timeout (ms, max 45000)
               </label>
@@ -279,6 +611,24 @@ export default function WcagScanPanel() {
               <label className="flex items-center gap-2 text-sm text-gray-300">
                 <input
                   type="checkbox"
+                  checked={includeBestPractices}
+                  onChange={(event) => setIncludeBestPractices(event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-[#13BBAF] focus:ring-[#13BBAF]"
+                />
+                Include best-practice rules
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={includeExperimental}
+                  onChange={(event) => setIncludeExperimental(event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-[#13BBAF] focus:ring-[#13BBAF]"
+                />
+                Include experimental rules
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <input
+                  type="checkbox"
                   checked={includeScreenshots}
                   onChange={(event) => setIncludeScreenshots(event.target.checked)}
                   className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-[#13BBAF] focus:ring-[#13BBAF]"
@@ -295,10 +645,38 @@ export default function WcagScanPanel() {
                 Include debug timing metadata
               </label>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="wcag-include-selectors">
+                Include selectors (optional)
+              </label>
+              <textarea
+                id="wcag-include-selectors"
+                rows={3}
+                placeholder="#main, .content"
+                value={includeSelectorsInput}
+                onChange={(event) => setIncludeSelectorsInput(event.target.value)}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white shadow-sm focus:outline-none focus:ring-[#13BBAF] focus:border-[#13BBAF]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="wcag-exclude-selectors">
+                Exclude selectors (optional)
+              </label>
+              <textarea
+                id="wcag-exclude-selectors"
+                rows={3}
+                placeholder="header, footer"
+                value={excludeSelectorsInput}
+                onChange={(event) => setExcludeSelectorsInput(event.target.value)}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white shadow-sm focus:outline-none focus:ring-[#13BBAF] focus:border-[#13BBAF]"
+              />
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             type="button"
             disabled={running}
@@ -306,6 +684,27 @@ export default function WcagScanPanel() {
             className="inline-flex items-center justify-center px-6 py-3 rounded-md text-black bg-[#EDC8FF] hover:bg-purple-200 disabled:bg-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors"
           >
             {running ? 'Running scan...' : 'Run scan'}
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPreset('quick')}
+            className="px-3 py-2 text-sm rounded-md border border-gray-600 text-gray-200 hover:bg-gray-800"
+          >
+            Quick preset
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPreset('balanced')}
+            className="px-3 py-2 text-sm rounded-md border border-gray-600 text-gray-200 hover:bg-gray-800"
+          >
+            Balanced preset
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPreset('deep')}
+            className="px-3 py-2 text-sm rounded-md border border-gray-600 text-gray-200 hover:bg-gray-800"
+          >
+            Deep preset
           </button>
           {running ? <span className="text-sm text-teal-300 animate-pulse">Scanning in progress...</span> : null}
         </div>
@@ -325,6 +724,12 @@ export default function WcagScanPanel() {
             <p className="text-sm text-gray-300">
               Truncated: {result.truncated ? 'Yes' : 'No'}
             </p>
+            <p className="text-sm text-gray-300">
+              Standards profile: {standards.ruleset || ruleset} | Tags: {Array.isArray(standards.tags) ? standards.tags.join(', ') : 'n/a'}
+            </p>
+            <p className="text-sm text-gray-300">
+              Scope include: {Array.isArray(scanScope.includeSelectors) && scanScope.includeSelectors.length ? scanScope.includeSelectors.join(', ') : 'none'} | Scope exclude: {Array.isArray(scanScope.excludeSelectors) && scanScope.excludeSelectors.length ? scanScope.excludeSelectors.join(', ') : 'none'}
+            </p>
             {result.message ? <p className="text-sm text-yellow-300">{result.message}</p> : null}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <div className="rounded border border-gray-700 p-3">
@@ -339,6 +744,14 @@ export default function WcagScanPanel() {
                 <div key={impact} className="rounded border border-gray-700 p-3">
                   <p className="text-xs text-gray-400 capitalize">{impact}</p>
                   <p className="text-xl font-semibold text-white">{getImpactCount(allIssues, impact)}</p>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {ISSUE_STATUSES.map((status) => (
+                <div key={status} className="rounded border border-gray-700 p-3">
+                  <p className="text-xs text-gray-400 capitalize">{formatStatusLabel(status)}</p>
+                  <p className="text-xl font-semibold text-white">{issueStatusCounts[status] || 0}</p>
                 </div>
               ))}
             </div>
@@ -401,13 +814,63 @@ export default function WcagScanPanel() {
 
             <div className="lg:col-span-2 bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-4 space-y-4">
               <h4 className="text-lg font-semibold text-white">Issue details</h4>
+              <div className="flex flex-wrap gap-3">
+                <select
+                  value={impactFilter}
+                  onChange={(event) => setImpactFilter(event.target.value)}
+                  className="px-3 py-2 text-sm rounded-md border border-gray-600 bg-gray-900 text-gray-200"
+                >
+                  <option value="all">All impacts</option>
+                  {IMPACT_ORDER.map((impact) => (
+                    <option key={impact} value={impact}>
+                      {impact}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value)}
+                  className="px-3 py-2 text-sm rounded-md border border-gray-600 bg-gray-900 text-gray-200"
+                >
+                  <option value="all">All statuses</option>
+                  {ISSUE_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {formatStatusLabel(status)}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={ruleFilter}
+                  onChange={(event) => setRuleFilter(event.target.value)}
+                  placeholder="Filter by rule id"
+                  className="flex-1 min-w-[180px] px-3 py-2 text-sm rounded-md border border-gray-600 bg-gray-900 text-gray-200"
+                />
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={dedupeIssuesEnabled}
+                    onChange={(event) => setDedupeIssuesEnabled(event.target.checked)}
+                    className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-[#13BBAF] focus:ring-[#13BBAF]"
+                  />
+                  Deduplicate issues
+                </label>
+                <button
+                  type="button"
+                  onClick={exportIssuesCsv}
+                  disabled={!filteredIssues.length}
+                  className="px-3 py-2 text-sm rounded-md border border-gray-600 text-gray-200 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Export CSV
+                </button>
+              </div>
               {selectedPage ? (
                 <p className="text-xs text-gray-400 break-all">Selected page: {selectedPage.url}</p>
               ) : null}
-              {pageIssues.length ? (
+              {filteredIssues.length ? (
                 <>
                   <p className="text-xs text-gray-400">
-                    Showing {Math.min(visibleIssueCount, pageIssues.length)} of {pageIssues.length} issues
+                    Showing {Math.min(visibleIssueCount, filteredIssues.length)} of {filteredIssues.length} issues
                   </p>
                   <div className="space-y-3">
                     {visibleIssues.map((issue, idx) => (
@@ -415,10 +878,12 @@ export default function WcagScanPanel() {
                         key={`${issue.pageUrl}-${issue.ruleId}-${idx}`}
                         issue={issue}
                         screenshot={screenshotsByPage.get(issue.pageUrl)}
+                        status={issueStatusMap[getIssueKey(issue)] || 'open'}
+                        onStatusChange={(nextStatus) => handleIssueStatusChange(issue, nextStatus)}
                       />
                     ))}
                   </div>
-                  {visibleIssueCount < pageIssues.length ? (
+                  {visibleIssueCount < filteredIssues.length ? (
                     <button
                       type="button"
                       onClick={() => setVisibleIssueCount((prev) => prev + ISSUE_PAGE_SIZE)}
@@ -431,6 +896,176 @@ export default function WcagScanPanel() {
               ) : (
                 <p className="text-sm text-gray-400">No issues for this page.</p>
               )}
+            </div>
+          </div>
+
+          <div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <h3 className="text-xl font-semibold text-white">Traceability & Coverage</h3>
+              <button
+                type="button"
+                onClick={exportLatestRun}
+                className="px-3 py-2 text-sm rounded-md border border-gray-600 text-gray-200 hover:bg-gray-800"
+              >
+                Export latest JSON
+              </button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded border border-gray-700 p-3">
+                <p className="text-xs text-gray-400">Pass rate</p>
+                <p className="text-xl font-semibold text-white">{coverage.passRate}%</p>
+              </div>
+              <div className="rounded border border-gray-700 p-3">
+                <p className="text-xs text-gray-400">Pages in run</p>
+                <p className="text-xl font-semibold text-white">{coverage.pageRows.length}</p>
+              </div>
+              <div className="rounded border border-gray-700 p-3">
+                <p className="text-xs text-gray-400">Unique rules</p>
+                <p className="text-xl font-semibold text-white">{coverage.uniqueRules}</p>
+              </div>
+              <div className="rounded border border-gray-700 p-3">
+                <p className="text-xs text-gray-400">Unique WCAG refs</p>
+                <p className="text-xl font-semibold text-white">{coverage.uniqueRefs}</p>
+              </div>
+            </div>
+            <div className="rounded border border-gray-700 bg-gray-950/40 p-3 overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="text-gray-300">
+                  <tr>
+                    <th className="py-2 pr-3">Page</th>
+                    <th className="py-2 pr-3">Issues</th>
+                    <th className="py-2 pr-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {coverage.pageRows.map((row) => (
+                    <tr key={row.url} className="border-t border-gray-800">
+                      <td className="py-2 pr-3 text-gray-300 break-all">{row.url}</td>
+                      <td className="py-2 pr-3 text-white">{row.issueCount}</td>
+                      <td className="py-2 pr-3">
+                        <span
+                          className={`text-xs rounded border px-2 py-1 ${
+                            row.pass
+                              ? 'border-emerald-700 bg-emerald-900/40 text-emerald-200'
+                              : 'border-red-700 bg-red-900/40 text-red-200'
+                          }`}
+                        >
+                          {row.pass ? 'pass' : 'fail'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="rounded border border-gray-700 bg-gray-950/40 p-3">
+              <p className="text-sm text-gray-200 font-medium">Top impacted WCAG criteria</p>
+              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                {coverage.topRefs.map(([ref, count]) => (
+                  <div key={ref} className="text-xs rounded border border-gray-800 px-2 py-1 text-gray-300">
+                    {ref}: {count}
+                  </div>
+                ))}
+                {!coverage.topRefs.length ? (
+                  <p className="text-xs text-gray-400">No WCAG references tagged in this run.</p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-4">
+            <h3 className="text-xl font-semibold text-white">Automation</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => applyPreset('quick')}
+                className="rounded border border-gray-700 bg-gray-900/60 p-3 text-left hover:bg-gray-800/60"
+              >
+                <p className="text-sm font-semibold text-white">Quick smoke</p>
+                <p className="text-xs text-gray-400 mt-1">Single page scan for fast gating.</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPreset('balanced')}
+                className="rounded border border-gray-700 bg-gray-900/60 p-3 text-left hover:bg-gray-800/60"
+              >
+                <p className="text-sm font-semibold text-white">Balanced crawl</p>
+                <p className="text-xs text-gray-400 mt-1">Medium-depth default regression run.</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPreset('deep')}
+                className="rounded border border-gray-700 bg-gray-900/60 p-3 text-left hover:bg-gray-800/60"
+              >
+                <p className="text-sm font-semibold text-white">Deep audit</p>
+                <p className="text-xs text-gray-400 mt-1">Max pages with screenshots and debug metadata.</p>
+              </button>
+            </div>
+            <pre className="text-xs text-teal-100 bg-gray-950 border border-gray-800 rounded p-3 overflow-auto">
+{JSON.stringify(automationPayload, null, 2)}
+            </pre>
+          </div>
+
+          <div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <h3 className="text-xl font-semibold text-white">Analytics</h3>
+              <button
+                type="button"
+                disabled={!runHistory.length}
+                onClick={() => setRunHistory([])}
+                className="px-3 py-2 text-sm rounded-md border border-gray-600 text-gray-200 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Clear history
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="rounded border border-gray-700 p-3">
+                <p className="text-xs text-gray-400">Tracked runs</p>
+                <p className="text-xl font-semibold text-white">{runHistory.length}</p>
+              </div>
+              <div className="rounded border border-gray-700 p-3">
+                <p className="text-xs text-gray-400">Latest run issues</p>
+                <p className="text-xl font-semibold text-white">{latestRun?.issuesCount ?? 'n/a'}</p>
+              </div>
+              <div className="rounded border border-gray-700 p-3">
+                <p className="text-xs text-gray-400">Issue delta vs previous</p>
+                <p className="text-xl font-semibold text-white">
+                  {issuesDelta == null ? 'n/a' : issuesDelta > 0 ? `+${issuesDelta}` : String(issuesDelta)}
+                </p>
+              </div>
+            </div>
+            <div className="rounded border border-gray-700 bg-gray-950/40 p-3 overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="text-gray-300">
+                  <tr>
+                    <th className="py-2 pr-3">Run</th>
+                    <th className="py-2 pr-3">URL</th>
+                    <th className="py-2 pr-3">Mode</th>
+                    <th className="py-2 pr-3">Ruleset</th>
+                    <th className="py-2 pr-3">Issues</th>
+                    <th className="py-2 pr-3">Critical</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {runHistory.map((run) => (
+                    <tr key={run.id} className="border-t border-gray-800">
+                      <td className="py-2 pr-3 text-gray-300">{new Date(run.createdAt).toLocaleString()}</td>
+                      <td className="py-2 pr-3 text-gray-300 break-all">{run.scanUrl}</td>
+                      <td className="py-2 pr-3 text-white">{run.mode}</td>
+                      <td className="py-2 pr-3 text-white">{run.ruleset || 'n/a'}</td>
+                      <td className="py-2 pr-3 text-white">{run.issuesCount}</td>
+                      <td className="py-2 pr-3 text-white">{run.impactCounts?.critical || 0}</td>
+                    </tr>
+                  ))}
+                  {!runHistory.length ? (
+                    <tr>
+                      <td className="py-2 pr-3 text-gray-400" colSpan={6}>
+                        No historical runs yet.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
