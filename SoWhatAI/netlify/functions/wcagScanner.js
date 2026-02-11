@@ -1,5 +1,7 @@
-const { chromium } = require('playwright');
-const AxeBuilder = require('@axe-core/playwright').default;
+import { chromium } from 'playwright';
+import AxePlaywright from '@axe-core/playwright';
+
+const AxeBuilder = AxePlaywright.default ?? AxePlaywright;
 
 const MAX_TIMEOUT_MS = 45000;
 const DEFAULT_SINGLE_TIMEOUT_MS = 28000;
@@ -908,6 +910,4 @@ async function runWcagScan(input) {
   return response;
 }
 
-module.exports = {
-  runWcagScan
-};
+export { runWcagScan };
