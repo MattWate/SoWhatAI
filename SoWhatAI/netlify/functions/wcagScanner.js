@@ -30,7 +30,15 @@ const LOAD_STATE_CAP_MS = 5000;
 const DEFAULT_AXE_TIMEOUT_MS = 8000;
 const SCREENSHOT_CAPTURE_BUDGET_MS = 3500;
 
-const TAGS = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa', 'best-practice'];
+const DEFAULT_RULESET = 'wcag22aa';
+const RULESET_TAGS = {
+  wcag2a: ['wcag2a'],
+  wcag2aa: ['wcag2a', 'wcag2aa'],
+  wcag21aa: ['wcag2a', 'wcag2aa', 'wcag21aa'],
+  wcag22aa: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'],
+  section508: ['section508']
+};
+const MAX_SCOPE_SELECTORS = 8;
 const TRACKING_PARAMS = new Set(['fbclid', 'gclid', 'yclid', 'mc_eid']);
 const SKIP_FILE_EXT = /\.(pdf|zip|docx?|xlsx?|pptx?|csv|mp4|mp3|avi|mov|exe|dmg|rar)$/i;
 const SKIP_PATH_PATTERNS = [/\/logout/i, /\/signout/i, /^\/account(?:\/|$)/i, /\/cart/i, /\/checkout/i];
@@ -52,6 +60,20 @@ function clampInt(value, fallback, min, max) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return fallback;
   return Math.min(max, Math.max(min, Math.floor(numeric)));
+}
+
+function normalizeRuleset(value) {
+  if (typeof value !== 'string') return DEFAULT_RULESET;
+  const normalized = value.trim().toLowerCase();
+  return RULESET_TAGS[normalized] ? normalized : DEFAULT_RULESET;
+}
+
+function buildAxeTags(ruleset, includeBestPractices, includeExperimental) {
+  const base = RULESET_TAGS[ruleset] || RULESET_TAGS[DEFAULT_RULESET];
+  const tags = [...base];
+  if (includeBestPractices) tags.push('best-practice');
+  if (includeExperimental) tags.push('experimental');
+  return Array.from(new Set(tags));
 }
 
 function createTimeoutError(code, message) {
@@ -147,6 +169,14 @@ function trimSelectors(value) {
     .slice(0, MAX_SELECTOR_COUNT)
     .map((item) => trimText(String(item || ''), MAX_SELECTOR_LENGTH))
     .filter(Boolean);
+}
+
+function sanitizeScopeSelectors(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => trimText(String(item || '').trim(), MAX_SELECTOR_LENGTH))
+    .filter(Boolean)
+    .slice(0, MAX_SCOPE_SELECTORS);
 }
 
 function getWcagRefs(tags = []) {
@@ -448,8 +478,19 @@ async function captureScreenshotForPage(context, pageUrl, timeBudget) {
 
 function buildOptions(input) {
   const mode = input.mode === 'crawl' ? 'crawl' : 'single';
+  const ruleset = normalizeRuleset(input.ruleset);
+  const includeBestPractices = Boolean(input.includeBestPractices);
+  const includeExperimental = Boolean(input.includeExperimental);
   return {
     mode,
+    ruleset,
+    includeBestPractices,
+    includeExperimental,
+    axeTags: buildAxeTags(ruleset, includeBestPractices, includeExperimental),
+    scope: {
+      includeSelectors: sanitizeScopeSelectors(input.includeSelectors),
+      excludeSelectors: sanitizeScopeSelectors(input.excludeSelectors)
+    },
     includeScreenshots: Boolean(input.includeScreenshots ?? false),
     debug: Boolean(input.debug),
     resourceBlocking:
@@ -485,6 +526,8 @@ async function scanPage({
   mode,
   startOrigin,
   includeBbox,
+  axeTags,
+  scope,
   caps,
   timeBudget
 }) {
@@ -515,8 +558,15 @@ async function scanPage({
 
       const axeStart = Date.now();
       const axeTimeout = Math.max(1200, Math.min(DEFAULT_AXE_TIMEOUT_MS, timeBudget.remainingMs() - 300));
+      let builder = new AxeBuilder({ page }).withTags(axeTags);
+      for (const selector of scope.includeSelectors) {
+        builder = builder.include(selector);
+      }
+      for (const selector of scope.excludeSelectors) {
+        builder = builder.exclude(selector);
+      }
       const axe = await withTimeout(
-        new AxeBuilder({ page }).withTags(TAGS).analyze(),
+        builder.analyze(),
         axeTimeout,
         'AXE_TIMEOUT',
         `Axe analysis timed out after ${axeTimeout}ms`
@@ -626,7 +676,14 @@ async function runWcagScan(input) {
         truncated: true,
         truncation: { timeBudget: false, maxPages: false, maxTotalIssues: false },
         errorsSummary: { totalErrors: 1, totalTimeouts: 0, messages: ['Invalid start URL'] },
-        caps: options.caps
+        caps: options.caps,
+        standards: {
+          ruleset: options.ruleset,
+          tags: options.axeTags,
+          includeBestPractices: options.includeBestPractices,
+          includeExperimental: options.includeExperimental
+        },
+        scope: options.scope
       }
     };
   }
@@ -703,6 +760,8 @@ async function runWcagScan(input) {
         mode: options.mode,
         startOrigin,
         includeBbox: true,
+        axeTags: options.axeTags,
+        scope: options.scope,
         caps: options.caps,
         timeBudget
       });
@@ -890,7 +949,14 @@ async function runWcagScan(input) {
         enabled: options.includeScreenshots,
         maxScreenshots: MAX_SCREENSHOTS
       },
-      caps: options.caps
+      caps: options.caps,
+      standards: {
+        ruleset: options.ruleset,
+        tags: options.axeTags,
+        includeBestPractices: options.includeBestPractices,
+        includeExperimental: options.includeExperimental
+      },
+      scope: options.scope
     }
   };
 
