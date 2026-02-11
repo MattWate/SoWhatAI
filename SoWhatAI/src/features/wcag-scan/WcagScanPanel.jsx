@@ -301,6 +301,7 @@ export default function WcagScanPanel() {
   const pages = result?.pages || [];
   const allIssues = result?.issues || [];
   const metadata = result?.metadata || {};
+  const runtimeErrorMeta = metadata.runtimeError || null;
   const errorsSummary = metadata.errorsSummary || { totalErrors: 0, totalTimeouts: 0, messages: [] };
 
   const pageIssues = useMemo(() => {
@@ -731,6 +732,7 @@ export default function WcagScanPanel() {
               Scope include: {Array.isArray(scanScope.includeSelectors) && scanScope.includeSelectors.length ? scanScope.includeSelectors.join(', ') : 'none'} | Scope exclude: {Array.isArray(scanScope.excludeSelectors) && scanScope.excludeSelectors.length ? scanScope.excludeSelectors.join(', ') : 'none'}
             </p>
             {result.message ? <p className="text-sm text-yellow-300">{result.message}</p> : null}
+            {runtimeErrorMeta?.hint ? <p className="text-sm text-orange-300">{runtimeErrorMeta.hint}</p> : null}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <div className="rounded border border-gray-700 p-3">
                 <p className="text-xs text-gray-400">Pages returned</p>

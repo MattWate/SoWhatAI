@@ -3,6 +3,11 @@ import AxePlaywright from '@axe-core/playwright';
 
 const AxeBuilder = AxePlaywright.default ?? AxePlaywright;
 
+// Ensure Playwright resolves browsers from the bundled local path in serverless runtime.
+if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = '0';
+}
+
 const MAX_TIMEOUT_MS = 45000;
 const DEFAULT_SINGLE_TIMEOUT_MS = 28000;
 const DEFAULT_CRAWL_TIMEOUT_MS = 35000;
@@ -409,6 +414,22 @@ function buildErrorsSummary(pageSummaries, globalErrors) {
   };
 }
 
+function getRuntimeHint(errorText) {
+  const text = String(errorText || '').toLowerCase();
+  if (
+    text.includes("executable doesn't exist") ||
+    text.includes('failed to launch') ||
+    text.includes('could not find browser') ||
+    text.includes('browsertype.launch')
+  ) {
+    return 'Chromium launch failed. Verify Playwright Chromium is installed and bundled in Netlify build output.';
+  }
+  if (text.includes('target page, context or browser has been closed')) {
+    return 'Browser session closed unexpectedly. Try reducing max pages/timeouts and rerun.';
+  }
+  return '';
+}
+
 function selectScreenshotTargets(startUrl, pageSummaries) {
   const startPage = pageSummaries.find((page) => page.url === startUrl && page.status === 'ok');
   const candidates = pageSummaries
@@ -433,8 +454,9 @@ async function captureScreenshotForPage(context, pageUrl, timeBudget) {
     return { pageUrl, omitted: true, reason: 'time_budget_low' };
   }
 
-  const page = await context.newPage();
+  let page = null;
   try {
+    page = await context.newPage();
     const navTimeout = Math.max(1000, Math.min(SCREENSHOT_CAPTURE_BUDGET_MS, timeBudget.remainingMs() - 300));
     if (navTimeout < 1000) {
       return { pageUrl, omitted: true, reason: 'time_budget_low' };
@@ -472,7 +494,9 @@ async function captureScreenshotForPage(context, pageUrl, timeBudget) {
       reason: error.message || String(error)
     };
   } finally {
-    await page.close().catch(() => {});
+    if (page) {
+      await page.close().catch(() => {});
+    }
   }
 }
 
@@ -532,13 +556,14 @@ async function scanPage({
   timeBudget
 }) {
   const pageStartedAt = Date.now();
-  const page = await context.newPage();
+  let page = null;
   const timings = {
     navigationMs: 0,
     axeMs: 0
   };
 
   try {
+    page = await context.newPage();
     const remaining = timeBudget.remainingMs();
     const pageBudgetMs = Math.max(
       1200,
@@ -646,7 +671,9 @@ async function scanPage({
       timings
     };
   } finally {
-    await page.close().catch(() => {});
+    if (page) {
+      await page.close().catch(() => {});
+    }
   }
 }
 
@@ -705,6 +732,8 @@ async function runWcagScan(input) {
   let totalIssuesCapHit = false;
   let maxPagesCapHit = false;
   let timeBudgetHit = false;
+  let runtimeErrorMessage = '';
+  let runtimeHint = '';
 
   try {
     browser = await chromium.launch({
@@ -854,7 +883,12 @@ async function runWcagScan(input) {
       globalErrors.push(...screenshotErrors);
     }
   } catch (error) {
-    globalErrors.push(error.message || String(error));
+    runtimeErrorMessage = error?.message || String(error);
+    runtimeHint = getRuntimeHint(runtimeErrorMessage);
+    globalErrors.push(runtimeErrorMessage);
+    if (runtimeHint) {
+      globalErrors.push(runtimeHint);
+    }
     breakReason = breakReason || 'runtime_error';
     scanTruncated = true;
   } finally {
@@ -894,7 +928,9 @@ async function runWcagScan(input) {
   } else if (breakReason === 'max_pages_reached') {
     message = 'Page cap reached. Crawl ended at configured max pages.';
   } else if (status === 'partial' && breakReason === 'runtime_error') {
-    message = 'Runtime error occurred. Returning partial results.';
+    const reason = runtimeErrorMessage ? ` ${runtimeErrorMessage}` : '';
+    const hint = runtimeHint ? ` ${runtimeHint}` : '';
+    message = `Runtime error occurred.${reason}${hint}`.trim();
   }
 
   const errorsSummary = buildErrorsSummary(pagesSummary, globalErrors);
@@ -956,7 +992,14 @@ async function runWcagScan(input) {
         includeBestPractices: options.includeBestPractices,
         includeExperimental: options.includeExperimental
       },
-      scope: options.scope
+      scope: options.scope,
+      runtimeError:
+        breakReason === 'runtime_error'
+          ? {
+              message: runtimeErrorMessage || null,
+              hint: runtimeHint || null
+            }
+          : null
     }
   };
 
