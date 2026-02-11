@@ -1,4 +1,4 @@
-import { runWcagScan } from './wcagScanner.js';
+import { runWcagScan } from '../lib/wcagScannerCore.js';
 
 function json(statusCode, body) {
   return {
