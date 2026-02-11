@@ -10,7 +10,7 @@ function json(statusCode, body) {
   };
 }
 
-exports.handler = async (event) => {
+exports.handler = async (event, context) => {
   if (event.httpMethod !== 'POST') {
     return json(405, { error: 'Method Not Allowed' });
   }
@@ -67,9 +67,12 @@ exports.handler = async (event) => {
       maxNodesPerViolation,
       maxTotalIssuesOverall
     });
+
     return json(200, result);
+
   } catch (error) {
     const now = new Date().toISOString();
+
     return json(200, {
       status: 'partial',
       message: 'Unexpected runtime error. Returning empty partial result.',
@@ -88,7 +91,11 @@ exports.handler = async (event) => {
         pagesAttempted: 0,
         pagesScanned: 0,
         truncated: true,
-        truncation: { timeBudget: false, maxPages: false, maxTotalIssues: false },
+        truncation: {
+          timeBudget: false,
+          maxPages: false,
+          maxTotalIssues: false
+        },
         errorsSummary: {
           totalErrors: 1,
           totalTimeouts: 0,
