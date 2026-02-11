@@ -10,9 +10,7 @@
   },
   "dependencies": {
     "@sparticuz/chromium": "^131.0.1",
-    "@axe-core/playwright": "^4.10.2",
     "@supabase/supabase-js": "^2.39.0",
-    "axe-core": "^4.10.2",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.1",
     "playwright-core": "^1.51.1",
