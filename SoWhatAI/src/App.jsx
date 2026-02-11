@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient.js';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import PptxGenJS from 'pptxgenjs';
+import WcagScanPage from './pages/WcagScanPage.jsx';
 
 /* =========================================================
   Supabase helpers (CRUD)
@@ -144,6 +145,12 @@ const HomePage = ({ onNavigate }) => (
       >
         Get Started for Free
       </button>
+      <button
+        onClick={() => onNavigate('wcag-scan')}
+        className="px-6 py-3 text-base font-semibold text-white bg-gray-800 border border-gray-600 rounded-md shadow-lg hover:bg-gray-700 transition-colors"
+      >
+        WCAG Scan
+      </button>
     </div>
     <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
       <div className="p-6 bg-gray-800/50 rounded-lg border border-gray-700">
@@ -161,6 +168,14 @@ const HomePage = ({ onNavigate }) => (
     </div>
   </div>
 );
+
+const pageFromPath = (pathname) => {
+  return pathname === '/wcag-scan' ? 'wcag-scan' : 'home';
+};
+
+const pathFromPage = (page) => {
+  return page === 'wcag-scan' ? '/wcag-scan' : '/';
+};
 
 /* ---------------- Login ---------------- */
 const LoginPage = ({ onLogin, onNavigate }) => {
@@ -1683,7 +1698,7 @@ const AnalysisToolPage = ({ onNavigate, initialProjectId }) => {
 /* ---------------- App (router/shell) ---------------- */
 export default function App() {
   const [user, setUser] = useState(null);
-  const [page, setPage] = useState('home');
+  const [page, setPage] = useState(pageFromPath(window.location.pathname));
   const [openingProjectId, setOpeningProjectId] = useState(null);
   
   useEffect(() => {
@@ -1697,15 +1712,32 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, [page]);
 
+  useEffect(() => {
+    const handlePopState = () => {
+      const nextPage = pageFromPath(window.location.pathname);
+      setPage(nextPage);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const setPageWithPath = (nextPage) => {
+    const targetPath = pathFromPage(nextPage);
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({}, '', targetPath);
+    }
+    setPage(nextPage);
+  };
+
   const handleLogin = (loggedInUser) => {
     setUser(loggedInUser);
-    setPage('dashboard');
+    setPageWithPath('dashboard');
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
-    setPage('home');
+    setPageWithPath('home');
     setOpeningProjectId(null);
   };
 
@@ -1715,15 +1747,15 @@ export default function App() {
     }
     
     if (!user && (destination === 'app' || destination === 'dashboard')) {
-      setPage('login');
+      setPageWithPath('login');
     } else {
-      setPage(destination);
+      setPageWithPath(destination);
     }
   };
 
   const handleOpenProject = async (projectId) => {
     setOpeningProjectId(projectId);
-    setPage('app');
+    setPageWithPath('app');
   };
 
   return (
@@ -1737,7 +1769,9 @@ export default function App() {
       <Header user={user} onLogout={handleLogout} onNavigate={handleNavigate} />
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        {user ? (
+        {page === 'wcag-scan' ? (
+          <WcagScanPage onNavigate={handleNavigate} />
+        ) : user ? (
           page === 'app' ? (
             <AnalysisToolPage
               onNavigate={handleNavigate}

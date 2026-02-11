@@ -1,10 +1,19 @@
 # This file is in the repository root
 [build]
   base = "SoWhatAI"
-  command = "npm install && npm run build"
+  command = "PLAYWRIGHT_BROWSERS_PATH=0 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install && npx playwright install chromium && npm run build"
   publish = "dist"
 
 [functions]
   directory = "netlify/functions"
+  node_bundler = "esbuild"
+  external_node_modules = ["playwright", "@axe-core/playwright", "axe-core"]
+  included_files = ["node_modules/playwright-core/.local-browsers/**"]
 
+[[redirects]]
+  from = "/wcag-scan"
+  to = "/index.html"
+  status = 200
 
+[[plugins]]
+  package = "netlify-plugin-playwright-cache"
