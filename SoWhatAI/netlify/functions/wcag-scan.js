@@ -1,4 +1,4 @@
-const { runWcagScan } = require('../../wcag-scan-scanner/wcagScanner');
+const { runWcagScan } = require('./wcagScanner');
 
 function json(statusCode, body) {
   return {
