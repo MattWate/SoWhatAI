@@ -1,0 +1,9 @@
+axe-core
+Copyright (c) Deque Systems, Inc.
+
+This project uses axe-core, which is licensed under the Mozilla Public License, v. 2.0.
+
+License identifier: MPL-2.0
+Project: https://github.com/dequelabs/axe-core
+Package: https://www.npmjs.com/package/axe-core
+Full license text: https://www.mozilla.org/en-US/MPL/2.0/

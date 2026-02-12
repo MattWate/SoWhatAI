@@ -9,7 +9,7 @@
   node_bundler = "esbuild"
 
 [functions."wcag-scan"]
-  external_node_modules = ["playwright-core", "@sparticuz/chromium"]
+  external_node_modules = ["playwright-core", "@sparticuz/chromium", "axe-core"]
 
 [[redirects]]
   from = "/wcag-scan"

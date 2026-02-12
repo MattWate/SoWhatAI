@@ -3,13 +3,6 @@ import { runWcagScan } from './api.js';
 
 const IMPACT_ORDER = ['critical', 'serious', 'moderate', 'minor'];
 const ISSUE_STATUSES = ['open', 'in_progress', 'resolved', 'accepted_risk'];
-const RULESET_OPTIONS = [
-  { value: 'wcag2a', label: 'WCAG 2.0 A' },
-  { value: 'wcag2aa', label: 'WCAG 2.0 AA' },
-  { value: 'wcag21aa', label: 'WCAG 2.1 AA' },
-  { value: 'wcag22aa', label: 'WCAG 2.2 AA' },
-  { value: 'section508', label: 'Section 508' }
-];
 const INITIAL_VISIBLE_ISSUES = 30;
 const ISSUE_PAGE_SIZE = 30;
 const RUN_HISTORY_STORAGE_KEY = 'wcagScan.runHistory.v1';
@@ -107,15 +100,6 @@ function buildCoverageSnapshot(scanResult) {
     uniqueRefs: wcagRefCounts.size,
     topRefs: Array.from(wcagRefCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10)
   };
-}
-
-function parseSelectorInput(value) {
-  if (!value || typeof value !== 'string') return [];
-  return value
-    .split(/\r?\n|,/g)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, 8);
 }
 
 function dedupeIssueList(issues) {
@@ -252,14 +236,6 @@ function IssueCard({ issue, screenshot, status, onStatusChange }) {
 
 export default function WcagScanPanel() {
   const [startUrl, setStartUrl] = useState('');
-  const [ruleset, setRuleset] = useState('wcag22aa');
-  const [includeBestPractices, setIncludeBestPractices] = useState(false);
-  const [includeExperimental, setIncludeExperimental] = useState(false);
-  const [includeSelectorsInput, setIncludeSelectorsInput] = useState('');
-  const [excludeSelectorsInput, setExcludeSelectorsInput] = useState('');
-  const [includeScreenshots, setIncludeScreenshots] = useState(false);
-  const [timeoutMs, setTimeoutMs] = useState(30000);
-  const [debug, setDebug] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
@@ -268,7 +244,7 @@ export default function WcagScanPanel() {
   const [impactFilter, setImpactFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [ruleFilter, setRuleFilter] = useState('');
-  const [dedupeIssuesEnabled, setDedupeIssuesEnabled] = useState(true);
+  const [dedupeIssuesEnabled, setDedupeIssuesEnabled] = useState(false);
   const [runHistory, setRunHistory] = useState(() => loadJsonStorage(RUN_HISTORY_STORAGE_KEY, []));
   const [issueStatusMap, setIssueStatusMap] = useState(() => loadJsonStorage(ISSUE_STATUS_STORAGE_KEY, {}));
 
@@ -347,16 +323,7 @@ export default function WcagScanPanel() {
     setRunning(true);
     try {
       const payload = {
-        startUrl: startUrl.trim(),
-        mode: 'single',
-        ruleset,
-        includeBestPractices,
-        includeExperimental,
-        includeSelectors: parseSelectorInput(includeSelectorsInput),
-        excludeSelectors: parseSelectorInput(excludeSelectorsInput),
-        includeScreenshots,
-        timeoutMs: Number(timeoutMs),
-        debug
+        startUrl: startUrl.trim()
       };
 
       const scanResult = await runWcagScan(payload);
@@ -377,31 +344,6 @@ export default function WcagScanPanel() {
       ...prev,
       [getIssueKey(issue)]: nextStatus
     }));
-  };
-
-  const applyPreset = (preset) => {
-    if (preset === 'quick') {
-      setRuleset('wcag2aa');
-      setIncludeBestPractices(false);
-      setIncludeExperimental(false);
-      setTimeoutMs(15000);
-      setIncludeScreenshots(false);
-      setDebug(false);
-    } else if (preset === 'balanced') {
-      setRuleset('wcag21aa');
-      setIncludeBestPractices(false);
-      setIncludeExperimental(false);
-      setTimeoutMs(30000);
-      setIncludeScreenshots(false);
-      setDebug(false);
-    } else if (preset === 'deep') {
-      setRuleset('wcag22aa');
-      setIncludeBestPractices(true);
-      setIncludeExperimental(true);
-      setTimeoutMs(45000);
-      setIncludeScreenshots(true);
-      setDebug(true);
-    }
   };
 
   const exportLatestRun = () => {
@@ -452,31 +394,7 @@ export default function WcagScanPanel() {
   const durationText = formatDuration(result?.durationMs ?? metadata.durationMs ?? result?.elapsedMs);
   const coverage = useMemo(() => buildCoverageSnapshot(result), [result]);
   const standards = metadata?.standards || {};
-  const scanScope = metadata?.scope || {};
-  const automationPayload = useMemo(() => {
-    return {
-      startUrl: startUrl.trim() || 'https://example.com',
-      mode: 'single',
-      ruleset,
-      includeBestPractices,
-      includeExperimental,
-      includeSelectors: parseSelectorInput(includeSelectorsInput),
-      excludeSelectors: parseSelectorInput(excludeSelectorsInput),
-      includeScreenshots,
-      timeoutMs: Number(timeoutMs),
-      debug
-    };
-  }, [
-    startUrl,
-    ruleset,
-    includeBestPractices,
-    includeExperimental,
-    includeSelectorsInput,
-    excludeSelectorsInput,
-    includeScreenshots,
-    timeoutMs,
-    debug
-  ]);
+  const engineInsights = metadata?.engine?.insights || null;
 
   const issueStatusCounts = useMemo(() => {
     const counts = { open: 0, in_progress: 0, resolved: 0, accepted_risk: 0 };
@@ -519,121 +437,10 @@ export default function WcagScanPanel() {
             {urlError && startUrl ? <p className="mt-1 text-xs text-red-400">{urlError}</p> : null}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="wcag-mode-fixed">
-                Scan mode
-              </label>
-              <input
-                id="wcag-mode-fixed"
-                type="text"
-                value="Single page"
-                readOnly
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white shadow-sm opacity-80"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="wcag-ruleset-select">
-                Standards profile
-              </label>
-              <select
-                id="wcag-ruleset-select"
-                value={ruleset}
-                onChange={(event) => setRuleset(event.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white shadow-sm focus:outline-none focus:ring-[#13BBAF] focus:border-[#13BBAF]"
-              >
-                {RULESET_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="wcag-timeout">
-                Timeout (ms, max 45000)
-              </label>
-              <input
-                id="wcag-timeout"
-                type="number"
-                min={5000}
-                max={45000}
-                step={1000}
-                value={timeoutMs}
-                onChange={(event) => setTimeoutMs(event.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white shadow-sm focus:outline-none focus:ring-[#13BBAF] focus:border-[#13BBAF]"
-              />
-            </div>
-
-            <div className="space-y-3 mt-7">
-              <label className="flex items-center gap-2 text-sm text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={includeBestPractices}
-                  onChange={(event) => setIncludeBestPractices(event.target.checked)}
-                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-[#13BBAF] focus:ring-[#13BBAF]"
-                />
-                Include best-practice rules
-              </label>
-              <label className="flex items-center gap-2 text-sm text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={includeExperimental}
-                  onChange={(event) => setIncludeExperimental(event.target.checked)}
-                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-[#13BBAF] focus:ring-[#13BBAF]"
-                />
-                Include experimental rules
-              </label>
-              <label className="flex items-center gap-2 text-sm text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={includeScreenshots}
-                  onChange={(event) => setIncludeScreenshots(event.target.checked)}
-                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-[#13BBAF] focus:ring-[#13BBAF]"
-                />
-                Include screenshots and markers
-              </label>
-              <label className="flex items-center gap-2 text-sm text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={debug}
-                  onChange={(event) => setDebug(event.target.checked)}
-                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-[#13BBAF] focus:ring-[#13BBAF]"
-                />
-                Include debug timing metadata
-              </label>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="wcag-include-selectors">
-                Include selectors (optional)
-              </label>
-              <textarea
-                id="wcag-include-selectors"
-                rows={3}
-                placeholder="#main, .content"
-                value={includeSelectorsInput}
-                onChange={(event) => setIncludeSelectorsInput(event.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white shadow-sm focus:outline-none focus:ring-[#13BBAF] focus:border-[#13BBAF]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="wcag-exclude-selectors">
-                Exclude selectors (optional)
-              </label>
-              <textarea
-                id="wcag-exclude-selectors"
-                rows={3}
-                placeholder="header, footer"
-                value={excludeSelectorsInput}
-                onChange={(event) => setExcludeSelectorsInput(event.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white shadow-sm focus:outline-none focus:ring-[#13BBAF] focus:border-[#13BBAF]"
-              />
-            </div>
-          </div>
+          <p className="text-xs text-gray-400">
+            Fixed profile: single-page WCAG 2.2 AA scan with best-practice and advanced rules, experimental off,
+            screenshots with markers, and full-page selector coverage. Accessibility testing powered by axe-core.
+          </p>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
@@ -644,27 +451,6 @@ export default function WcagScanPanel() {
             className="inline-flex items-center justify-center px-6 py-3 rounded-md text-black bg-[#EDC8FF] hover:bg-purple-200 disabled:bg-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors"
           >
             {running ? 'Running scan...' : 'Run scan'}
-          </button>
-          <button
-            type="button"
-            onClick={() => applyPreset('quick')}
-            className="px-3 py-2 text-sm rounded-md border border-gray-600 text-gray-200 hover:bg-gray-800"
-          >
-            Quick preset
-          </button>
-          <button
-            type="button"
-            onClick={() => applyPreset('balanced')}
-            className="px-3 py-2 text-sm rounded-md border border-gray-600 text-gray-200 hover:bg-gray-800"
-          >
-            Balanced preset
-          </button>
-          <button
-            type="button"
-            onClick={() => applyPreset('deep')}
-            className="px-3 py-2 text-sm rounded-md border border-gray-600 text-gray-200 hover:bg-gray-800"
-          >
-            Deep preset
           </button>
           {running ? <span className="text-sm text-teal-300 animate-pulse">Scanning in progress...</span> : null}
         </div>
@@ -685,10 +471,11 @@ export default function WcagScanPanel() {
               Truncated: {result.truncated ? 'Yes' : 'No'}
             </p>
             <p className="text-sm text-gray-300">
-              Standards profile: {standards.ruleset || ruleset} | Tags: {Array.isArray(standards.tags) ? standards.tags.join(', ') : 'n/a'}
+              Standards profile: {standards.ruleset || 'wcag22aa'} | Tags:{' '}
+              {Array.isArray(standards.tags) ? standards.tags.join(', ') : 'n/a'}
             </p>
             <p className="text-sm text-gray-300">
-              Scope include: {Array.isArray(scanScope.includeSelectors) && scanScope.includeSelectors.length ? scanScope.includeSelectors.join(', ') : 'none'} | Scope exclude: {Array.isArray(scanScope.excludeSelectors) && scanScope.excludeSelectors.length ? scanScope.excludeSelectors.join(', ') : 'none'}
+              Scope: Full page (all selectors)
             </p>
             {result.message ? <p className="text-sm text-yellow-300">{result.message}</p> : null}
             {runtimeErrorMeta?.hint ? <p className="text-sm text-orange-300">{runtimeErrorMeta.hint}</p> : null}
@@ -729,6 +516,33 @@ export default function WcagScanPanel() {
                 </ul>
               ) : null}
             </div>
+            {engineInsights ? (
+              <div className="rounded border border-cyan-700 bg-cyan-950/30 p-3">
+                <p className="text-sm text-cyan-200 font-medium">Axe insights</p>
+                <p className="text-xs text-cyan-100 mt-1">
+                  Reported issues: {engineInsights.issueCount ?? allIssues.length} | Incomplete/manual review rules:{' '}
+                  {engineInsights.incompleteRuleCount ?? 0}
+                </p>
+                {Array.isArray(engineInsights.topRules) && engineInsights.topRules.length > 0 ? (
+                  <p className="text-xs text-cyan-100 mt-2">
+                    Top rules:{' '}
+                    {engineInsights.topRules
+                      .slice(0, 5)
+                      .map((item) => `${item.ruleId} (${item.count})`)
+                      .join(', ')}
+                  </p>
+                ) : null}
+                {Array.isArray(engineInsights.incompleteTopRules) && engineInsights.incompleteTopRules.length > 0 ? (
+                  <p className="text-xs text-cyan-100 mt-1">
+                    Top incomplete checks:{' '}
+                    {engineInsights.incompleteTopRules
+                      .slice(0, 5)
+                      .map((item) => `${item.ruleId} (${item.count})`)
+                      .join(', ')}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="rounded border border-amber-700 bg-amber-950/40 p-3">
               <p className="text-sm text-amber-200 font-medium">Needs review</p>
               {(result.needsReview || []).length > 0 ? (
@@ -932,39 +746,6 @@ export default function WcagScanPanel() {
                 ) : null}
               </div>
             </div>
-          </div>
-
-          <div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-4">
-            <h3 className="text-xl font-semibold text-white">Automation</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <button
-                type="button"
-                onClick={() => applyPreset('quick')}
-                className="rounded border border-gray-700 bg-gray-900/60 p-3 text-left hover:bg-gray-800/60"
-              >
-                <p className="text-sm font-semibold text-white">Quick smoke</p>
-                <p className="text-xs text-gray-400 mt-1">Single page scan for fast gating.</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset('balanced')}
-                className="rounded border border-gray-700 bg-gray-900/60 p-3 text-left hover:bg-gray-800/60"
-              >
-                <p className="text-sm font-semibold text-white">Balanced single-page</p>
-                <p className="text-xs text-gray-400 mt-1">Single page scan with balanced timing defaults.</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset('deep')}
-                className="rounded border border-gray-700 bg-gray-900/60 p-3 text-left hover:bg-gray-800/60"
-              >
-                <p className="text-sm font-semibold text-white">Deep audit</p>
-                <p className="text-xs text-gray-400 mt-1">Single page with screenshots and debug metadata.</p>
-              </button>
-            </div>
-            <pre className="text-xs text-teal-100 bg-gray-950 border border-gray-800 rounded p-3 overflow-auto">
-{JSON.stringify(automationPayload, null, 2)}
-            </pre>
           </div>
 
           <div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-4">
