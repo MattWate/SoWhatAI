@@ -22,6 +22,7 @@ The same endpoint now uses a parallel multi-engine pipeline (all engines run wit
 - `metadata.timeoutOccurred` + `metadata.truncated` for serverless time-budget cutoffs (`TOTAL_SCAN_BUDGET_MS = 20000`)
 
 Set `PAGESPEED_API_KEY` in Netlify environment variables to use a dedicated PSI key (optional, but recommended for higher quota).
+The orchestrator fetches PSI once per scanned page and shares that payload across accessibility/performance/SEO/best-practices engines to reduce quota usage.
 
 Accessibility testing powered by axe-core.
 Third-party license notice: `SoWhatAI/licenses/axe-core-LICENSE.txt`.

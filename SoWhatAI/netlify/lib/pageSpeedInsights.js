@@ -606,6 +606,7 @@ async function fetchPerformanceReport({
 }
 
 export {
+  buildPerformanceReportFromPsi,
   createEmptyPerformanceReport,
   fetchPerformanceReport,
   summarizePerformanceIssues
