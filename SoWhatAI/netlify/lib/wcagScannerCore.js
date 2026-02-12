@@ -1,6 +1,7 @@
 import chromium from '@sparticuz/chromium';
 import { chromium as playwrightChromium } from 'playwright-core';
 import { SCAN_ENGINE_NAME, collectEngineViolations, selectEngineRules } from './lumenRuleEngine.js';
+import { collectPerformanceAudit, summarizePerformanceIssues } from './performanceAudit.js';
 
 const MAX_TIMEOUT_MS = 45000;
 const DEFAULT_SINGLE_TIMEOUT_MS = 28000;
@@ -33,6 +34,7 @@ const PAGE_PREP_SCROLL_STEP_PX = 900;
 const PAGE_PREP_SCROLL_SETTLE_MS = 180;
 const PAGE_PREP_MAX_SCROLL_STEPS = 50;
 const PAGE_PREP_SCROLL_TIMEOUT_MS = 6000;
+const PAGE_PREP_ASSET_WAIT_TIMEOUT_MS = 7000;
 
 const DEFAULT_RULESET = 'wcag22aa';
 const RULESET_TAGS = {
@@ -328,26 +330,29 @@ async function preparePageForChecks(page, availableMs) {
     await withTimeout(
       page.evaluate(async ({ stepPx, settleMs, maxSteps }) => {
         const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-        const scrollHeight = () =>
+        const documentHeight = () =>
           Math.max(
             document.documentElement ? document.documentElement.scrollHeight : 0,
             document.body ? document.body.scrollHeight : 0
           );
+        const maxScrollY = () => Math.max(0, documentHeight() - window.innerHeight);
 
-        let previousHeight = scrollHeight();
-        for (let step = 0; step < maxSteps; step += 1) {
-          window.scrollTo(0, scrollHeight());
-          await wait(settleMs);
-          const currentHeight = scrollHeight();
-          const atBottom = window.innerHeight + window.scrollY >= currentHeight - 4;
-          if (atBottom && currentHeight === previousHeight) break;
-          previousHeight = currentHeight;
-          window.scrollBy(0, stepPx);
-          await wait(Math.max(80, Math.floor(settleMs / 2)));
+        // Walk the page progressively so IntersectionObserver/lazy-load content is actually triggered.
+        for (let pass = 0; pass < 2; pass += 1) {
+          let stepCount = 0;
+          let y = 0;
+          while (y < maxScrollY() && stepCount < maxSteps) {
+            window.scrollTo(0, y);
+            await wait(settleMs);
+            y += stepPx;
+            stepCount += 1;
+          }
+          window.scrollTo(0, maxScrollY());
+          await wait(Math.max(settleMs, 260));
         }
 
-        window.scrollTo(0, scrollHeight());
-        await wait(settleMs);
+        window.scrollTo(0, maxScrollY());
+        await wait(Math.max(settleMs, 260));
         window.scrollTo(0, 0);
       }, {
         stepPx: PAGE_PREP_SCROLL_STEP_PX,
@@ -357,6 +362,65 @@ async function preparePageForChecks(page, availableMs) {
       scrollTimeout,
       'PAGE_PREP_TIMEOUT',
       `Page preparation exceeded ${scrollTimeout}ms`
+    );
+  } catch {}
+
+  const assetWaitTimeout = Math.max(
+    1400,
+    Math.min(
+      PAGE_PREP_ASSET_WAIT_TIMEOUT_MS,
+      Number.isFinite(availableMs) ? Math.max(1400, availableMs - 200) : PAGE_PREP_ASSET_WAIT_TIMEOUT_MS
+    )
+  );
+  try {
+    await withTimeout(
+      page.evaluate(async () => {
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+        const mapAttribute = (el, attr, dataAttr) => {
+          if (!el.hasAttribute(attr) && el.hasAttribute(dataAttr)) {
+            el.setAttribute(attr, el.getAttribute(dataAttr) || '');
+          }
+        };
+
+        const lazyCandidates = document.querySelectorAll(
+          'img, source, iframe, video'
+        );
+        lazyCandidates.forEach((el) => {
+          if (el.hasAttribute('loading')) {
+            el.setAttribute('loading', 'eager');
+          }
+          mapAttribute(el, 'src', 'data-src');
+          mapAttribute(el, 'srcset', 'data-srcset');
+          mapAttribute(el, 'poster', 'data-poster');
+        });
+
+        const images = Array.from(document.images);
+        await Promise.all(
+          images.map(async (img) => {
+            try {
+              if (!img.complete) {
+                await Promise.race([
+                  new Promise((resolve) => img.addEventListener('load', resolve, { once: true })),
+                  new Promise((resolve) => img.addEventListener('error', resolve, { once: true })),
+                  wait(1800)
+                ]);
+              }
+              if (typeof img.decode === 'function') {
+                await img.decode().catch(() => {});
+              }
+            } catch {}
+          })
+        );
+
+        if (document.fonts && typeof document.fonts.ready?.then === 'function') {
+          await document.fonts.ready.catch(() => {});
+        }
+        await wait(160);
+      }),
+      assetWaitTimeout,
+      'PAGE_ASSET_WAIT_TIMEOUT',
+      `Page asset readiness exceeded ${assetWaitTimeout}ms`
     );
   } catch {}
 
@@ -521,6 +585,16 @@ function buildImpactSummary(issues) {
   return summary;
 }
 
+function buildPerformanceIssueCountsByPage(performanceIssues) {
+  const map = new Map();
+  for (const issue of Array.isArray(performanceIssues) ? performanceIssues : []) {
+    const pageUrl = String(issue?.pageUrl || '').trim();
+    if (!pageUrl) continue;
+    map.set(pageUrl, (map.get(pageUrl) || 0) + 1);
+  }
+  return map;
+}
+
 function aggregateEngineInsights(perPageInsights, issues) {
   const incompleteByRule = new Map();
   const incompleteSamples = [];
@@ -672,10 +746,12 @@ async function captureScreenshotForPage(context, pageUrl, timeBudget) {
 }
 
 function buildOptions(input) {
-  const mode = 'single';
+  const mode = String(input.mode || '').toLowerCase() === 'crawl' ? 'crawl' : 'single';
   const ruleset = DEFAULT_RULESET;
   const includeBestPractices = true;
   const includeExperimental = false;
+  const includeScreenshots = input.includeScreenshots == null ? true : Boolean(input.includeScreenshots);
+  const maxPages = mode === 'crawl' ? clampMaxPages(input.maxPages) : 1;
   const profileTags = buildProfileTags(ruleset, includeBestPractices, includeExperimental);
   return {
     mode,
@@ -688,12 +764,12 @@ function buildOptions(input) {
       includeSelectors: [],
       excludeSelectors: []
     },
-    includeScreenshots: true,
+    includeScreenshots,
     debug: false,
     resourceBlocking: false,
     blockImages: false,
     timeoutMs: FIXED_SCAN_TIMEOUT_MS,
-    maxPages: 1,
+    maxPages,
     caps: {
       maxViolationsPerPage: clampInt(
         input.maxViolationsPerPage,
@@ -732,7 +808,8 @@ async function scanPage({
   let page = null;
   const timings = {
     navigationMs: 0,
-    engineMs: 0
+    engineMs: 0,
+    performanceMs: 0
   };
 
   try {
@@ -774,6 +851,9 @@ async function scanPage({
       timings.engineMs = Date.now() - engineStart;
 
       const heuristics = await runHeuristics(page);
+      const performanceStart = Date.now();
+      const performanceAudit = await collectPerformanceAudit(page, pageUrl);
+      timings.performanceMs = Date.now() - performanceStart;
       const violations = Array.isArray(engineResult.violations)
         ? [...engineResult.violations].sort(compareViolations)
         : [];
@@ -816,6 +896,8 @@ async function scanPage({
         issues,
         heuristics,
         engineInsights: engineResult?.insights || null,
+        performanceIssues: Array.isArray(performanceAudit?.issues) ? performanceAudit.issues : [],
+        performanceSummary: performanceAudit?.summary || summarizePerformanceIssues([]),
         discoveredLinks,
         pageTruncatedBy,
         detectedViolationCount: violations.length
@@ -842,6 +924,8 @@ async function scanPage({
       issues: [],
       heuristics: null,
       engineInsights: null,
+      performanceIssues: [],
+      performanceSummary: summarizePerformanceIssues([]),
       discoveredLinks: [],
       pageTruncatedBy: { violations: false, nodes: false, totalIssues: false },
       detectedViolationCount: 0,
@@ -873,6 +957,7 @@ async function runWcagScan(input) {
       elapsedMs: timeBudget.elapsedMs(),
       pages: [],
       issues: [],
+      performanceIssues: [],
       screenshots: [],
       needsReview: [],
       truncated: true,
@@ -895,7 +980,8 @@ async function runWcagScan(input) {
           includeBestPractices: options.includeBestPractices,
           includeExperimental: options.includeExperimental
         },
-        scope: options.scope
+        scope: options.scope,
+        performance: summarizePerformanceIssues([])
       }
     };
   }
@@ -906,6 +992,7 @@ async function runWcagScan(input) {
 
   const pagesSummary = [];
   const issues = [];
+  const performanceIssues = [];
   const screenshots = [];
   const heuristicFlags = [];
   const globalErrors = [];
@@ -993,6 +1080,9 @@ async function runWcagScan(input) {
           ...pageResult.engineInsights
         });
       }
+      if (Array.isArray(pageResult.performanceIssues) && pageResult.performanceIssues.length > 0) {
+        performanceIssues.push(...pageResult.performanceIssues);
+      }
 
       const remainingIssueBudget = Math.max(0, options.caps.maxTotalIssuesOverall - issues.length);
       let acceptedIssues = pageResult.issues.slice(0, remainingIssueBudget);
@@ -1016,6 +1106,7 @@ async function runWcagScan(input) {
         url: current.url,
         status: pageResult.status,
         issueCount: acceptedIssues.length,
+        performanceIssueCount: Array.isArray(pageResult.performanceIssues) ? pageResult.performanceIssues.length : 0,
         detectedIssueCount: pageResult.issues.length,
         detectedViolationCount: pageResult.detectedViolationCount,
         error: pageResult.error || null,
@@ -1035,6 +1126,7 @@ async function runWcagScan(input) {
           durationMs: pageResult.durationMs,
           navigationMs: pageResult.timings.navigationMs,
           engineMs: pageResult.timings.engineMs,
+          performanceMs: pageResult.timings.performanceMs,
           issueCount: acceptedIssues.length
         });
       }
@@ -1123,6 +1215,8 @@ async function runWcagScan(input) {
   }
 
   const errorsSummary = buildErrorsSummary(pagesSummary, globalErrors);
+  const performanceSummary = summarizePerformanceIssues(performanceIssues);
+  const performanceIssuesByPage = buildPerformanceIssueCountsByPage(performanceIssues);
   const needsReview = mergeNeedsReview(
     buildNeedsReviewFlags(options.mode, pagesSummary),
     [...heuristicFlags, ...buildIncompleteNeedsReviewFlags(engineInsightsByPage)]
@@ -1152,6 +1246,7 @@ async function runWcagScan(input) {
     },
     pages: pagesSummary,
     issues,
+    performanceIssues,
     screenshots,
     needsReview,
     metadata: {
@@ -1185,6 +1280,13 @@ async function runWcagScan(input) {
         includeExperimental: options.includeExperimental
       },
       scope: options.scope,
+      performance: {
+        ...performanceSummary,
+        pages: pagesSummary.map((page) => ({
+          url: page.url,
+          issueCount: performanceIssuesByPage.get(page.url) || 0
+        }))
+      },
       runtimeError:
         breakReason === 'runtime_error'
           ? {
