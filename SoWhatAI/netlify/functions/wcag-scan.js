@@ -2,6 +2,7 @@ import { runAccessibilityEngine } from '../lib/accessibilityEngine.js';
 import { runPerformanceEngine } from '../lib/performanceEngine.js';
 import { runSeoEngine } from '../lib/seoEngine.js';
 import { runBestPracticesEngine } from '../lib/bestPracticesEngine.js';
+import { fetchPsiPayload } from '../lib/psiClient.js';
 
 function json(statusCode, body) {
   return {
@@ -23,6 +24,7 @@ const CRAWL_FETCH_TIMEOUT_MS = 2500;
 const MAX_CRAWL_QUEUE = 120;
 const MAX_LINKS_PER_PAGE = 24;
 const MAX_ISSUES_PER_ENGINE = 220;
+const SHARED_PSI_CATEGORIES = ['accessibility', 'performance', 'seo', 'best-practices'];
 const TRACKING_PARAMS = new Set(['fbclid', 'gclid', 'yclid', 'mc_eid']);
 const SKIP_FILE_EXT = /\.(pdf|zip|docx?|xlsx?|pptx?|csv|mp4|mp3|avi|mov|exe|dmg|rar)$/i;
 
@@ -758,6 +760,41 @@ exports.handler = async (event, context) => {
       }
 
       const pageStartedAt = Date.now();
+      let sharedPsiPayload = null;
+      let sharedPsiFetchDurationMs = 0;
+      let sharedPsiStrategy = 'desktop';
+      let sharedPsiError = '';
+      const remainingForSharedPsi = timeBudget.remainingMs() - 240;
+
+      if (remainingForSharedPsi >= MIN_REMAINING_TO_START_ENGINE_MS) {
+        const sharedPsiTimeout = Math.max(
+          MIN_ENGINE_TIMEOUT_MS,
+          Math.min(DEFAULT_ENGINE_TIMEOUT_MS, remainingForSharedPsi)
+        );
+        const sharedPsiResult = await runWithTimeout(
+          fetchPsiPayload({
+            startUrl: targetUrl,
+            categories: SHARED_PSI_CATEGORIES,
+            strategy: 'desktop',
+            timeoutMs: sharedPsiTimeout
+          }),
+          sharedPsiTimeout
+        );
+
+        if (sharedPsiResult.status === 'success' && sharedPsiResult.value?.payload) {
+          sharedPsiPayload = sharedPsiResult.value.payload;
+          sharedPsiFetchDurationMs = Number(sharedPsiResult.value.fetchDurationMs) || 0;
+          sharedPsiStrategy = sharedPsiResult.value.strategy || 'desktop';
+        } else if (sharedPsiResult.status === 'timeout') {
+          timeoutOccurred = true;
+          sharedPsiError = `PSI timed out after ${sharedPsiTimeout}ms.`;
+        } else {
+          sharedPsiError = sanitizeError(sharedPsiResult.error);
+        }
+      } else {
+        sharedPsiError = 'Insufficient remaining scan budget for PSI request.';
+      }
+
       const settled = await Promise.allSettled(
         ENGINE_REGISTRY.map((definition) => {
           enginesRunSet.add(definition.key);
@@ -766,7 +803,12 @@ exports.handler = async (event, context) => {
             {
               ...requestInput,
               startUrl: targetUrl,
-              pageUrl: targetUrl
+              pageUrl: targetUrl,
+              psiPayload: sharedPsiPayload,
+              psiFetchDurationMs: sharedPsiFetchDurationMs,
+              psiStrategy: sharedPsiStrategy,
+              sharedPsiError,
+              sharedPsiAttempted: true
             },
             timeBudget
           );

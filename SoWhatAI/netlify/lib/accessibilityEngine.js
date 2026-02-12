@@ -49,15 +49,44 @@ async function runAccessibilityEngine({
   maxPages = 1,
   includeScreenshots = false,
   strategy = 'desktop',
-  timeoutMs = 12000
+  timeoutMs = 12000,
+  psiPayload = null,
+  psiFetchDurationMs = 0,
+  psiStrategy = '',
+  sharedPsiError = '',
+  sharedPsiAttempted = false
 } = {}) {
   try {
-    const { payload, fetchDurationMs, strategy: resolvedStrategy } = await fetchPsiPayload({
-      startUrl,
-      categories: [CATEGORY_KEY],
-      strategy,
-      timeoutMs
-    });
+    if (sharedPsiAttempted && sharedPsiError) {
+      const message = sanitizeErrorMessage(sharedPsiError);
+      return {
+        status: 'failed',
+        data: createEmptyAccessibilityData({
+          startUrl,
+          mode,
+          maxPages,
+          includeScreenshots,
+          strategy,
+          error: message
+        }),
+        error: message
+      };
+    }
+
+    let payload = psiPayload;
+    let fetchDurationMs = Number(psiFetchDurationMs) || 0;
+    let resolvedStrategy = psiStrategy || strategy;
+    if (!payload || typeof payload !== 'object') {
+      const fetched = await fetchPsiPayload({
+        startUrl,
+        categories: [CATEGORY_KEY],
+        strategy,
+        timeoutMs
+      });
+      payload = fetched.payload;
+      fetchDurationMs = fetched.fetchDurationMs;
+      resolvedStrategy = fetched.strategy;
+    }
     const issues = buildCategoryIssues(payload, CATEGORY_KEY, { maxIssues: 40 });
     const score = getCategoryScore(payload, CATEGORY_KEY);
     const analyzedUrl = String(payload?.lighthouseResult?.finalDisplayedUrl || payload?.id || startUrl);
