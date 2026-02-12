@@ -51,16 +51,18 @@ function formatStatusLabel(status) {
 }
 
 function summarizeRun(scanResult, scanUrl) {
-  const issues = scanResult?.issues || [];
+  const issues = scanResult?.issues || scanResult?.accessibility?.issues || [];
+  const performanceIssues = scanResult?.performance?.issues || scanResult?.performanceIssues || [];
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     createdAt: new Date().toISOString(),
     scanUrl,
-    mode: scanResult?.mode || 'single',
+    mode: scanResult?.mode || scanResult?.metadata?.request?.mode || 'single',
     ruleset: scanResult?.metadata?.standards?.ruleset || 'wcag22aa',
-    status: scanResult?.status || 'complete',
-    pagesCount: (scanResult?.pages || []).length,
+    status: scanResult?.status || (scanResult?.metadata?.enginesFailed?.length ? 'partial' : 'complete'),
+    pagesCount: (scanResult?.pages || scanResult?.accessibility?.pages || []).length,
     issuesCount: issues.length,
+    performanceIssuesCount: performanceIssues.length,
     durationMs: scanResult?.durationMs ?? scanResult?.elapsedMs ?? scanResult?.metadata?.durationMs ?? null,
     impactCounts: {
       critical: getImpactCount(issues, 'critical'),
@@ -264,11 +266,29 @@ export default function WcagScanPanel() {
     return '';
   }, [startUrl]);
 
-  const pages = result?.pages || [];
-  const allIssues = result?.issues || [];
+  const pages = result?.pages || result?.accessibility?.pages || [];
+  const allIssues = result?.issues || result?.accessibility?.issues || [];
+  const performancePayload = result?.performance || null;
+  const performanceIssues = performancePayload?.issues || result?.performanceIssues || [];
   const metadata = result?.metadata || {};
   const runtimeErrorMeta = metadata.runtimeError || null;
-  const errorsSummary = metadata.errorsSummary || { totalErrors: 0, totalTimeouts: 0, messages: [] };
+  const engineErrors = metadata?.engineErrors && typeof metadata.engineErrors === 'object'
+    ? metadata.engineErrors
+    : {};
+  const errorsSummary = metadata.errorsSummary || {
+    totalErrors: Object.keys(engineErrors).length,
+    totalTimeouts: 0,
+    messages: Object.entries(engineErrors).map(([engine, message]) => `${engine}: ${message}`)
+  };
+  const performanceSummary = performancePayload?.summary || metadata?.performance || {
+    issueCount: 0,
+    impactSummary: { critical: 0, serious: 0, moderate: 0, minor: 0 },
+    topRules: [],
+    pages: []
+  };
+  const performanceScore = Number.isFinite(Number(performancePayload?.score))
+    ? Math.round(Number(performancePayload.score))
+    : null;
 
   const pageIssues = useMemo(() => {
     if (!selectedPageUrl) return allIssues;
@@ -291,6 +311,11 @@ export default function WcagScanPanel() {
       return true;
     });
   }, [normalizedPageIssues, impactFilter, statusFilter, ruleFilter, issueStatusMap]);
+
+  const pagePerformanceIssues = useMemo(() => {
+    if (!selectedPageUrl) return performanceIssues;
+    return performanceIssues.filter((issue) => issue.pageUrl === selectedPageUrl);
+  }, [performanceIssues, selectedPageUrl]);
 
   useEffect(() => {
     setVisibleIssueCount(INITIAL_VISIBLE_ISSUES);
@@ -488,6 +513,12 @@ export default function WcagScanPanel() {
                 <p className="text-xs text-gray-400">Total issues</p>
                 <p className="text-xl font-semibold text-white">{allIssues.length}</p>
               </div>
+              <div className="rounded border border-gray-700 p-3">
+                <p className="text-xs text-gray-400">Performance issues</p>
+                <p className="text-xl font-semibold text-white">
+                  {performanceSummary.issueCount ?? performanceIssues.length}
+                </p>
+              </div>
               {IMPACT_ORDER.map((impact) => (
                 <div key={impact} className="rounded border border-gray-700 p-3">
                   <p className="text-xs text-gray-400 capitalize">{impact}</p>
@@ -543,6 +574,38 @@ export default function WcagScanPanel() {
                 ) : null}
               </div>
             ) : null}
+            {performanceIssues.length > 0 ? (
+              <div className="rounded border border-indigo-700 bg-indigo-950/30 p-3 space-y-2">
+                <p className="text-sm text-indigo-200 font-medium">Performance issues</p>
+                <p className="text-xs text-indigo-100">
+                  Total: {performanceSummary.issueCount ?? performanceIssues.length}
+                  {selectedPageUrl ? ` | Selected page: ${pagePerformanceIssues.length}` : ''}
+                  {performanceScore != null ? ` | PSI score: ${performanceScore}` : ''}
+                </p>
+                {Array.isArray(performanceSummary.topRules) && performanceSummary.topRules.length > 0 ? (
+                  <p className="text-xs text-indigo-100">
+                    Top performance rules:{' '}
+                    {performanceSummary.topRules
+                      .slice(0, 5)
+                      .map((item) => `${item.ruleId} (${item.count})`)
+                      .join(', ')}
+                  </p>
+                ) : null}
+                <ul className="mt-1 text-xs text-indigo-100 list-disc list-inside space-y-1">
+                  {pagePerformanceIssues.slice(0, 10).map((issue, idx) => (
+                    <li key={`${issue.ruleId}-${issue.pageUrl}-${idx}`}>
+                      [{issue.impact || 'moderate'}] {issue.ruleId}: {issue.failureSummary}
+                      {issue.value ? ` (value: ${issue.value})` : ''}
+                    </li>
+                  ))}
+                </ul>
+                {pagePerformanceIssues.length > 10 ? (
+                  <p className="text-xs text-indigo-200">
+                    Showing 10 of {pagePerformanceIssues.length} performance issues.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="rounded border border-amber-700 bg-amber-950/40 p-3">
               <p className="text-sm text-amber-200 font-medium">Needs review</p>
               {(result.needsReview || []).length > 0 ? (
@@ -580,6 +643,7 @@ export default function WcagScanPanel() {
                     <p className="text-xs text-gray-400 truncate">{page.url}</p>
                     <p className="text-sm text-white">Issues: {page.issueCount}</p>
                     <p className="text-xs text-gray-400">Status: {page.status}</p>
+                    <p className="text-xs text-gray-400">Performance issues: {page.performanceIssueCount ?? 0}</p>
                     <p className="text-xs text-gray-500">Truncated: {page.truncated ? 'Yes' : 'No'}</p>
                   </button>
                 ))}
@@ -785,6 +849,7 @@ export default function WcagScanPanel() {
                     <th className="py-2 pr-3">Mode</th>
                     <th className="py-2 pr-3">Ruleset</th>
                     <th className="py-2 pr-3">Issues</th>
+                    <th className="py-2 pr-3">Perf</th>
                     <th className="py-2 pr-3">Critical</th>
                   </tr>
                 </thead>
@@ -796,12 +861,13 @@ export default function WcagScanPanel() {
                       <td className="py-2 pr-3 text-white">{run.mode}</td>
                       <td className="py-2 pr-3 text-white">{run.ruleset || 'n/a'}</td>
                       <td className="py-2 pr-3 text-white">{run.issuesCount}</td>
+                      <td className="py-2 pr-3 text-white">{run.performanceIssuesCount ?? 0}</td>
                       <td className="py-2 pr-3 text-white">{run.impactCounts?.critical || 0}</td>
                     </tr>
                   ))}
                   {!runHistory.length ? (
                     <tr>
-                      <td className="py-2 pr-3 text-gray-400" colSpan={6}>
+                      <td className="py-2 pr-3 text-gray-400" colSpan={7}>
                         No historical runs yet.
                       </td>
                     </tr>

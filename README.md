@@ -9,8 +9,19 @@ The app now includes a WCAG scanning page at `/wcag-scan`.
 2. Enter a public URL.
 3. Run the single-page scan to view summary, per-page issues, and rule-level details.
 
-The scan runs through `POST /.netlify/functions/wcag-scan` using Playwright + `axe-core`, and captures screenshots with markers for issue pinpointing.
-The fixed profile runs WCAG 2.2 AA with best-practice/advanced checks enabled and experimental checks disabled.
+The scan runs through `POST /.netlify/functions/wcag-scan` as a serverless multi-engine audit endpoint (no headless browser runtime in the function path).
+The fixed profile targets WCAG 2.2 AA accessibility signals, with PSI performance/SEO/best-practices extraction.
+The same endpoint now uses a parallel multi-engine pipeline (all engines run with `Promise.allSettled` and per-engine timeouts) and merges Google PageSpeed Insights data into the final report under:
+
+- `accessibility` (axe-core attribution + Lighthouse accessibility signals)
+- `performance` (score, Core Web Vitals, Lighthouse metrics, opportunities, diagnostics, performance issues)
+- `seo` (Lighthouse SEO signals)
+- `bestPractices` (Lighthouse best-practices signals)
+- `summary` (`accessibilityScore`, `performanceScore`, `seoScore`, `bestPracticesScore`, `overallScore`)
+- `metadata.engineErrors` (partial-failure messages when any engine fails)
+- `metadata.timeoutOccurred` + `metadata.truncated` for serverless time-budget cutoffs (`TOTAL_SCAN_BUDGET_MS = 20000`)
+
+Set `PAGESPEED_API_KEY` in Netlify environment variables to use a dedicated PSI key (optional, but recommended for higher quota).
 
 Accessibility testing powered by axe-core.
 Third-party license notice: `SoWhatAI/licenses/axe-core-LICENSE.txt`.
