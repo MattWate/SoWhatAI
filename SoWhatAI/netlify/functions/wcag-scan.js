@@ -1,3 +1,8 @@
+import { runAccessibilityEngine } from '../lib/accessibilityEngine.js';
+import { runPerformanceEngine } from '../lib/performanceEngine.js';
+import { runSeoEngine } from '../lib/seoEngine.js';
+import { runBestPracticesEngine } from '../lib/bestPracticesEngine.js';
+
 function json(statusCode, body) {
   return {
     statusCode,
@@ -24,26 +29,22 @@ const SKIP_FILE_EXT = /\.(pdf|zip|docx?|xlsx?|pptx?|csv|mp4|mp3|avi|mov|exe|dmg|
 const ENGINE_REGISTRY = [
   {
     key: 'accessibility',
-    modulePath: '../lib/accessibilityEngine.js',
-    functionName: 'runAccessibilityEngine',
+    runner: runAccessibilityEngine,
     timeoutMs: DEFAULT_ENGINE_TIMEOUT_MS
   },
   {
     key: 'performance',
-    modulePath: '../lib/performanceEngine.js',
-    functionName: 'runPerformanceEngine',
+    runner: runPerformanceEngine,
     timeoutMs: DEFAULT_ENGINE_TIMEOUT_MS
   },
   {
     key: 'seo',
-    modulePath: '../lib/seoEngine.js',
-    functionName: 'runSeoEngine',
+    runner: runSeoEngine,
     timeoutMs: DEFAULT_ENGINE_TIMEOUT_MS
   },
   {
     key: 'bestPractices',
-    modulePath: '../lib/bestPracticesEngine.js',
-    functionName: 'runBestPracticesEngine',
+    runner: runBestPracticesEngine,
     timeoutMs: DEFAULT_ENGINE_TIMEOUT_MS
   }
 ];
@@ -411,10 +412,9 @@ async function runEngine(definition, engineInput, timeBudget) {
   );
 
   try {
-    const module = await import(definition.modulePath);
-    const runFn = module?.[definition.functionName];
+    const runFn = definition.runner;
     if (typeof runFn !== 'function') {
-      const error = `${definition.functionName} is unavailable.`;
+      const error = `${definition.key} engine runner is unavailable.`;
       return {
         key: definition.key,
         status: 'failed',
