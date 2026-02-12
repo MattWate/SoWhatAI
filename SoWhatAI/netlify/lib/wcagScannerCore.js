@@ -10,10 +10,10 @@ const MAX_PAGES = 10;
 const MAX_DEPTH = 2;
 
 const DEFAULT_MAX_VIOLATIONS_PER_PAGE = 50;
-const DEFAULT_MAX_NODES_PER_VIOLATION = 5;
+const DEFAULT_MAX_NODES_PER_VIOLATION = 20;
 const DEFAULT_MAX_TOTAL_ISSUES_OVERALL = 300;
 const MAX_VIOLATIONS_PER_PAGE = 100;
-const MAX_NODES_PER_VIOLATION = 10;
+const MAX_NODES_PER_VIOLATION = 80;
 const MAX_TOTAL_ISSUES_OVERALL = 1000;
 
 const MAX_SCREENSHOTS = 3;
@@ -26,8 +26,13 @@ const MAX_SELECTOR_LENGTH = 220;
 const DEFAULT_PAGE_SCAN_BUDGET_MS = 12000;
 const MIN_TIME_TO_START_NEW_PAGE_MS = 2200;
 const LOAD_STATE_CAP_MS = 5000;
-const DEFAULT_ENGINE_TIMEOUT_MS = 8000;
-const SCREENSHOT_CAPTURE_BUDGET_MS = 3500;
+const DEFAULT_ENGINE_TIMEOUT_MS = 12000;
+const SCREENSHOT_CAPTURE_BUDGET_MS = 9000;
+const FIXED_SCAN_TIMEOUT_MS = 45000;
+const PAGE_PREP_SCROLL_STEP_PX = 900;
+const PAGE_PREP_SCROLL_SETTLE_MS = 180;
+const PAGE_PREP_MAX_SCROLL_STEPS = 50;
+const PAGE_PREP_SCROLL_TIMEOUT_MS = 6000;
 
 const DEFAULT_RULESET = 'wcag22aa';
 const RULESET_TAGS = {
@@ -303,6 +308,63 @@ async function collectLinks(page, pageUrl, startOrigin) {
   return Array.from(output).sort((a, b) => a.localeCompare(b));
 }
 
+async function preparePageForChecks(page, availableMs) {
+  const loadTimeout = Math.max(
+    900,
+    Math.min(LOAD_STATE_CAP_MS, Number.isFinite(availableMs) ? Math.max(900, availableMs - 250) : LOAD_STATE_CAP_MS)
+  );
+  try {
+    await page.waitForLoadState('networkidle', { timeout: loadTimeout });
+  } catch {}
+
+  const scrollTimeout = Math.max(
+    1200,
+    Math.min(
+      PAGE_PREP_SCROLL_TIMEOUT_MS,
+      Number.isFinite(availableMs) ? Math.max(1200, availableMs - 250) : PAGE_PREP_SCROLL_TIMEOUT_MS
+    )
+  );
+  try {
+    await withTimeout(
+      page.evaluate(async ({ stepPx, settleMs, maxSteps }) => {
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        const scrollHeight = () =>
+          Math.max(
+            document.documentElement ? document.documentElement.scrollHeight : 0,
+            document.body ? document.body.scrollHeight : 0
+          );
+
+        let previousHeight = scrollHeight();
+        for (let step = 0; step < maxSteps; step += 1) {
+          window.scrollTo(0, scrollHeight());
+          await wait(settleMs);
+          const currentHeight = scrollHeight();
+          const atBottom = window.innerHeight + window.scrollY >= currentHeight - 4;
+          if (atBottom && currentHeight === previousHeight) break;
+          previousHeight = currentHeight;
+          window.scrollBy(0, stepPx);
+          await wait(Math.max(80, Math.floor(settleMs / 2)));
+        }
+
+        window.scrollTo(0, scrollHeight());
+        await wait(settleMs);
+        window.scrollTo(0, 0);
+      }, {
+        stepPx: PAGE_PREP_SCROLL_STEP_PX,
+        settleMs: PAGE_PREP_SCROLL_SETTLE_MS,
+        maxSteps: PAGE_PREP_MAX_SCROLL_STEPS
+      }),
+      scrollTimeout,
+      'PAGE_PREP_TIMEOUT',
+      `Page preparation exceeded ${scrollTimeout}ms`
+    );
+  } catch {}
+
+  try {
+    await page.waitForLoadState('networkidle', { timeout: Math.min(2000, loadTimeout) });
+  } catch {}
+}
+
 async function resolveBbox(page, selectors) {
   if (!Array.isArray(selectors) || selectors.length === 0) return null;
   for (let i = 0; i < selectors.length; i += 1) {
@@ -427,6 +489,101 @@ function buildErrorsSummary(pageSummaries, globalErrors) {
   };
 }
 
+function buildRuleTotals(issues) {
+  const counts = new Map();
+  for (const issue of Array.isArray(issues) ? issues : []) {
+    const ruleId = String(issue?.ruleId || '').trim();
+    if (!ruleId) continue;
+    counts.set(ruleId, (counts.get(ruleId) || 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      return a[0].localeCompare(b[0]);
+    })
+    .slice(0, 10)
+    .map(([ruleId, count]) => ({ ruleId, count }));
+}
+
+function buildImpactSummary(issues) {
+  const summary = {
+    critical: 0,
+    serious: 0,
+    moderate: 0,
+    minor: 0
+  };
+
+  for (const issue of Array.isArray(issues) ? issues : []) {
+    const impact = String(issue?.impact || '').toLowerCase();
+    if (summary[impact] != null) summary[impact] += 1;
+  }
+
+  return summary;
+}
+
+function aggregateEngineInsights(perPageInsights, issues) {
+  const incompleteByRule = new Map();
+  const incompleteSamples = [];
+
+  for (const entry of Array.isArray(perPageInsights) ? perPageInsights : []) {
+    if (!entry || !Array.isArray(entry.incomplete)) continue;
+    for (const inc of entry.incomplete) {
+      const ruleId = String(inc?.ruleId || '').trim();
+      if (!ruleId) continue;
+      incompleteByRule.set(ruleId, (incompleteByRule.get(ruleId) || 0) + 1);
+      if (incompleteSamples.length < 10) {
+        incompleteSamples.push({
+          pageUrl: entry.pageUrl,
+          ruleId,
+          impact: inc.impact || 'moderate',
+          help: inc.help || '',
+          nodeCount: Number.isFinite(inc.nodeCount) ? inc.nodeCount : 0
+        });
+      }
+    }
+  }
+
+  const incompleteTopRules = Array.from(incompleteByRule.entries())
+    .sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      return a[0].localeCompare(b[0]);
+    })
+    .slice(0, 8)
+    .map(([ruleId, count]) => ({ ruleId, count }));
+
+  return {
+    issueCount: Array.isArray(issues) ? issues.length : 0,
+    impactSummary: buildImpactSummary(issues),
+    topRules: buildRuleTotals(issues),
+    incompleteRuleCount: incompleteByRule.size,
+    incompleteTopRules,
+    incompleteSamples
+  };
+}
+
+function buildIncompleteNeedsReviewFlags(perPageInsights) {
+  const output = [];
+  const seen = new Set();
+
+  for (const entry of Array.isArray(perPageInsights) ? perPageInsights : []) {
+    if (!entry || !Array.isArray(entry.incomplete)) continue;
+    for (const inc of entry.incomplete) {
+      const ruleId = String(inc?.ruleId || '').trim();
+      if (!ruleId || seen.has(ruleId)) continue;
+      seen.add(ruleId);
+      output.push({
+        id: `axe-incomplete-${ruleId}`,
+        title: `Axe incomplete check: ${ruleId}`,
+        reason: inc?.help || `Axe marked ${ruleId} as requiring manual verification.`,
+        samples: [entry.pageUrl].filter(Boolean)
+      });
+      if (output.length >= 8) return output;
+    }
+  }
+
+  return output;
+}
+
 function getRuntimeHint(errorText) {
   const text = String(errorText || '').toLowerCase();
   if (
@@ -438,7 +595,7 @@ function getRuntimeHint(errorText) {
     return 'Chromium launch failed. Verify Playwright Chromium is installed and bundled in Netlify build output.';
   }
   if (text.includes('target page, context or browser has been closed')) {
-    return 'Browser session closed unexpectedly. Try reducing max pages/timeouts and rerun.';
+    return 'Browser session closed unexpectedly. Rerun the scan.';
   }
   return '';
 }
@@ -476,9 +633,10 @@ async function captureScreenshotForPage(context, pageUrl, timeBudget) {
     }
 
     await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: navTimeout });
-    try {
-      await page.waitForLoadState('networkidle', { timeout: Math.min(1500, navTimeout) });
-    } catch {}
+    await preparePageForChecks(
+      page,
+      Math.max(1400, Math.min(SCREENSHOT_CAPTURE_BUDGET_MS, timeBudget.remainingMs() - 300))
+    );
 
     const screenshot = await page.screenshot({
       fullPage: true,
@@ -515,9 +673,9 @@ async function captureScreenshotForPage(context, pageUrl, timeBudget) {
 
 function buildOptions(input) {
   const mode = 'single';
-  const ruleset = normalizeRuleset(input.ruleset);
-  const includeBestPractices = Boolean(input.includeBestPractices);
-  const includeExperimental = Boolean(input.includeExperimental);
+  const ruleset = DEFAULT_RULESET;
+  const includeBestPractices = true;
+  const includeExperimental = false;
   const profileTags = buildProfileTags(ruleset, includeBestPractices, includeExperimental);
   return {
     mode,
@@ -527,14 +685,14 @@ function buildOptions(input) {
     profileTags,
     engineRules: selectEngineRules(profileTags),
     scope: {
-      includeSelectors: sanitizeScopeSelectors(input.includeSelectors),
-      excludeSelectors: sanitizeScopeSelectors(input.excludeSelectors)
+      includeSelectors: [],
+      excludeSelectors: []
     },
-    includeScreenshots: Boolean(input.includeScreenshots ?? false),
-    debug: Boolean(input.debug),
-    resourceBlocking:
-      typeof input.resourceBlocking === 'boolean' ? input.resourceBlocking : false,
-    blockImages: Boolean(input.blockImages ?? false),
+    includeScreenshots: true,
+    debug: false,
+    resourceBlocking: false,
+    blockImages: false,
+    timeoutMs: FIXED_SCAN_TIMEOUT_MS,
     maxPages: 1,
     caps: {
       maxViolationsPerPage: clampInt(
@@ -589,11 +747,10 @@ async function scanPage({
       const navStart = Date.now();
       const navTimeout = Math.max(1000, Math.min(10000, timeBudget.remainingMs() - 500));
       await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: navTimeout });
-      try {
-        await page.waitForLoadState('networkidle', {
-          timeout: Math.min(LOAD_STATE_CAP_MS, Math.max(800, timeBudget.remainingMs() - 400))
-        });
-      } catch {}
+      await preparePageForChecks(
+        page,
+        Math.max(1600, Math.min(DEFAULT_PAGE_SCAN_BUDGET_MS, timeBudget.remainingMs() - 300))
+      );
       timings.navigationMs = Date.now() - navStart;
 
       const engineStart = Date.now();
@@ -606,7 +763,7 @@ async function scanPage({
           engineRules,
           includeSelectors: scope.includeSelectors,
           excludeSelectors: scope.excludeSelectors,
-          maxNodeSamples: Math.max(caps.maxNodesPerViolation, caps.maxNodesPerViolation * 3),
+          maxNodeSamples: caps.maxNodesPerViolation,
           maxHtmlSnippetLength: MAX_HTML_SNIPPET_LENGTH,
           maxFailureSummaryLength: MAX_FAILURE_SUMMARY_LENGTH
         }),
@@ -658,6 +815,7 @@ async function scanPage({
         status: 'ok',
         issues,
         heuristics,
+        engineInsights: engineResult?.insights || null,
         discoveredLinks,
         pageTruncatedBy,
         detectedViolationCount: violations.length
@@ -683,6 +841,7 @@ async function scanPage({
       status,
       issues: [],
       heuristics: null,
+      engineInsights: null,
       discoveredLinks: [],
       pageTruncatedBy: { violations: false, nodes: false, totalIssues: false },
       detectedViolationCount: 0,
@@ -699,7 +858,7 @@ async function scanPage({
 
 async function runWcagScan(input) {
   const options = buildOptions(input || {});
-  const timeBudget = createTimeBudget(input.timeoutMs, options.mode);
+  const timeBudget = createTimeBudget(options.timeoutMs, options.mode);
   const startUrl = normalizeUrl(input.startUrl, { stripTrackingParams: true });
 
   if (!startUrl) {
@@ -727,7 +886,8 @@ async function runWcagScan(input) {
         caps: options.caps,
         engine: {
           name: SCAN_ENGINE_NAME,
-          activeRuleCount: options.engineRules.length
+          activeRuleCount: options.engineRules.length,
+          insights: aggregateEngineInsights([], [])
         },
         standards: {
           ruleset: options.ruleset,
@@ -750,6 +910,7 @@ async function runWcagScan(input) {
   const heuristicFlags = [];
   const globalErrors = [];
   const debugPages = [];
+  const engineInsightsByPage = [];
 
   let pagesAttempted = 0;
   let pagesScanned = 0;
@@ -826,6 +987,12 @@ async function runWcagScan(input) {
       }
 
       heuristicFlags.push(...buildHeuristicFlags(current.url, pageResult.heuristics));
+      if (pageResult.engineInsights) {
+        engineInsightsByPage.push({
+          pageUrl: current.url,
+          ...pageResult.engineInsights
+        });
+      }
 
       const remainingIssueBudget = Math.max(0, options.caps.maxTotalIssuesOverall - issues.length);
       let acceptedIssues = pageResult.issues.slice(0, remainingIssueBudget);
@@ -958,7 +1125,7 @@ async function runWcagScan(input) {
   const errorsSummary = buildErrorsSummary(pagesSummary, globalErrors);
   const needsReview = mergeNeedsReview(
     buildNeedsReviewFlags(options.mode, pagesSummary),
-    heuristicFlags
+    [...heuristicFlags, ...buildIncompleteNeedsReviewFlags(engineInsightsByPage)]
   );
 
   const response = {
@@ -1008,7 +1175,8 @@ async function runWcagScan(input) {
       caps: options.caps,
       engine: {
         name: SCAN_ENGINE_NAME,
-        activeRuleCount: options.engineRules.length
+        activeRuleCount: options.engineRules.length,
+        insights: aggregateEngineInsights(engineInsightsByPage, issues)
       },
       standards: {
         ruleset: options.ruleset,

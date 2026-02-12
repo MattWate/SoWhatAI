@@ -1,4 +1,5 @@
 import { runWcagScan } from '../lib/wcagScannerCore.js';
+import { SCAN_ENGINE_NAME } from '../lib/lumenRuleEngine.js';
 
 function json(statusCode, body) {
   return {
@@ -10,7 +11,14 @@ function json(statusCode, body) {
   };
 }
 
-export const handler = async (event, context) => {
+const FIXED_STANDARDS = {
+  ruleset: 'wcag22aa',
+  tags: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa', 'best-practice'],
+  includeBestPractices: true,
+  includeExperimental: false
+};
+
+export const handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return json(405, { error: 'Method Not Allowed' });
   }
@@ -22,23 +30,7 @@ export const handler = async (event, context) => {
     return json(400, { error: 'Invalid JSON body.' });
   }
 
-  const {
-    startUrl,
-    mode,
-    includeScreenshots = false,
-    timeoutMs,
-    debug = false,
-    resourceBlocking,
-    blockImages,
-    maxViolationsPerPage,
-    maxNodesPerViolation,
-    maxTotalIssuesOverall,
-    ruleset,
-    includeBestPractices,
-    includeExperimental,
-    includeSelectors,
-    excludeSelectors
-  } = body;
+  const { startUrl } = body;
 
   if (!startUrl || typeof startUrl !== 'string') {
     return json(400, { error: 'startUrl is required.' });
@@ -53,38 +45,19 @@ export const handler = async (event, context) => {
     return json(400, { error: 'startUrl must be a valid URL.' });
   }
 
-  if (mode && mode !== 'single') {
-    return json(400, { error: "Only 'single' mode is currently supported." });
-  }
-
   try {
     const result = await runWcagScan({
-      startUrl,
-      mode: 'single',
-      includeScreenshots: Boolean(includeScreenshots),
-      timeoutMs,
-      debug: Boolean(debug),
-      resourceBlocking,
-      blockImages,
-      maxViolationsPerPage,
-      maxNodesPerViolation,
-      maxTotalIssuesOverall,
-      ruleset,
-      includeBestPractices,
-      includeExperimental,
-      includeSelectors,
-      excludeSelectors
+      startUrl
     });
 
     return json(200, result);
-
   } catch (error) {
     const now = new Date().toISOString();
 
     return json(200, {
       status: 'partial',
       message: 'Unexpected runtime error. Returning empty partial result.',
-      service: 'LumenScan',
+      service: SCAN_ENGINE_NAME,
       mode: 'single',
       startedAt: now,
       finishedAt: now,
@@ -109,15 +82,13 @@ export const handler = async (event, context) => {
           totalTimeouts: 0,
           messages: [error.message || String(error)]
         },
-        standards: {
-          ruleset: ruleset || 'wcag22aa',
-          tags: [],
-          includeBestPractices: Boolean(includeBestPractices),
-          includeExperimental: Boolean(includeExperimental)
-        },
+        standards: FIXED_STANDARDS,
         scope: {
-          includeSelectors: Array.isArray(includeSelectors) ? includeSelectors : [],
-          excludeSelectors: Array.isArray(excludeSelectors) ? excludeSelectors : []
+          includeSelectors: [],
+          excludeSelectors: []
+        },
+        screenshotSelection: {
+          enabled: true
         }
       }
     });
