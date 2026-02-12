@@ -28,12 +28,6 @@ function getImpactCount(issues, impact) {
   return issues.filter((issue) => issue.impact === impact).length;
 }
 
-function clampMaxPages(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return 5;
-  return Math.max(1, Math.min(10, Math.floor(numeric)));
-}
-
 function formatDuration(ms) {
   const numeric = Number(ms);
   if (!Number.isFinite(numeric) || numeric < 0) return 'n/a';
@@ -258,13 +252,11 @@ function IssueCard({ issue, screenshot, status, onStatusChange }) {
 
 export default function WcagScanPanel() {
   const [startUrl, setStartUrl] = useState('');
-  const [mode, setMode] = useState('single');
   const [ruleset, setRuleset] = useState('wcag22aa');
   const [includeBestPractices, setIncludeBestPractices] = useState(false);
   const [includeExperimental, setIncludeExperimental] = useState(false);
   const [includeSelectorsInput, setIncludeSelectorsInput] = useState('');
   const [excludeSelectorsInput, setExcludeSelectorsInput] = useState('');
-  const [maxPages, setMaxPages] = useState(5);
   const [includeScreenshots, setIncludeScreenshots] = useState(false);
   const [timeoutMs, setTimeoutMs] = useState(30000);
   const [debug, setDebug] = useState(false);
@@ -356,7 +348,7 @@ export default function WcagScanPanel() {
     try {
       const payload = {
         startUrl: startUrl.trim(),
-        mode,
+        mode: 'single',
         ruleset,
         includeBestPractices,
         includeExperimental,
@@ -366,9 +358,6 @@ export default function WcagScanPanel() {
         timeoutMs: Number(timeoutMs),
         debug
       };
-      if (mode === 'crawl') {
-        payload.maxPages = clampMaxPages(maxPages);
-      }
 
       const scanResult = await runWcagScan(payload);
       setResult(scanResult);
@@ -392,29 +381,23 @@ export default function WcagScanPanel() {
 
   const applyPreset = (preset) => {
     if (preset === 'quick') {
-      setMode('single');
       setRuleset('wcag2aa');
       setIncludeBestPractices(false);
       setIncludeExperimental(false);
-      setMaxPages(1);
       setTimeoutMs(15000);
       setIncludeScreenshots(false);
       setDebug(false);
     } else if (preset === 'balanced') {
-      setMode('crawl');
       setRuleset('wcag21aa');
       setIncludeBestPractices(false);
       setIncludeExperimental(false);
-      setMaxPages(5);
       setTimeoutMs(30000);
       setIncludeScreenshots(false);
       setDebug(false);
     } else if (preset === 'deep') {
-      setMode('crawl');
       setRuleset('wcag22aa');
       setIncludeBestPractices(true);
       setIncludeExperimental(true);
-      setMaxPages(10);
       setTimeoutMs(45000);
       setIncludeScreenshots(true);
       setDebug(true);
@@ -471,9 +454,9 @@ export default function WcagScanPanel() {
   const standards = metadata?.standards || {};
   const scanScope = metadata?.scope || {};
   const automationPayload = useMemo(() => {
-    const payload = {
+    return {
       startUrl: startUrl.trim() || 'https://example.com',
-      mode,
+      mode: 'single',
       ruleset,
       includeBestPractices,
       includeExperimental,
@@ -483,11 +466,8 @@ export default function WcagScanPanel() {
       timeoutMs: Number(timeoutMs),
       debug
     };
-    if (mode === 'crawl') payload.maxPages = clampMaxPages(maxPages);
-    return payload;
   }, [
     startUrl,
-    mode,
     ruleset,
     includeBestPractices,
     includeExperimental,
@@ -495,8 +475,7 @@ export default function WcagScanPanel() {
     excludeSelectorsInput,
     includeScreenshots,
     timeoutMs,
-    debug,
-    maxPages
+    debug
   ]);
 
   const issueStatusCounts = useMemo(() => {
@@ -542,33 +521,15 @@ export default function WcagScanPanel() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="wcag-mode-select">
+              <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="wcag-mode-fixed">
                 Scan mode
               </label>
-              <select
-                id="wcag-mode-select"
-                value={mode}
-                onChange={(event) => setMode(event.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white shadow-sm focus:outline-none focus:ring-[#13BBAF] focus:border-[#13BBAF]"
-              >
-                <option value="single">Single page</option>
-                <option value="crawl">Crawl</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="wcag-max-pages">
-                Max pages
-              </label>
               <input
-                id="wcag-max-pages"
-                type="number"
-                min={1}
-                max={10}
-                value={maxPages}
-                disabled={mode === 'single'}
-                onChange={(event) => setMaxPages(event.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white shadow-sm disabled:opacity-50 focus:outline-none focus:ring-[#13BBAF] focus:border-[#13BBAF]"
+                id="wcag-mode-fixed"
+                type="text"
+                value="Single page"
+                readOnly
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white shadow-sm opacity-80"
               />
             </div>
 
@@ -989,8 +950,8 @@ export default function WcagScanPanel() {
                 onClick={() => applyPreset('balanced')}
                 className="rounded border border-gray-700 bg-gray-900/60 p-3 text-left hover:bg-gray-800/60"
               >
-                <p className="text-sm font-semibold text-white">Balanced crawl</p>
-                <p className="text-xs text-gray-400 mt-1">Medium-depth default regression run.</p>
+                <p className="text-sm font-semibold text-white">Balanced single-page</p>
+                <p className="text-xs text-gray-400 mt-1">Single page scan with balanced timing defaults.</p>
               </button>
               <button
                 type="button"
@@ -998,7 +959,7 @@ export default function WcagScanPanel() {
                 className="rounded border border-gray-700 bg-gray-900/60 p-3 text-left hover:bg-gray-800/60"
               >
                 <p className="text-sm font-semibold text-white">Deep audit</p>
-                <p className="text-xs text-gray-400 mt-1">Max pages with screenshots and debug metadata.</p>
+                <p className="text-xs text-gray-400 mt-1">Single page with screenshots and debug metadata.</p>
               </button>
             </div>
             <pre className="text-xs text-teal-100 bg-gray-950 border border-gray-800 rounded p-3 overflow-auto">

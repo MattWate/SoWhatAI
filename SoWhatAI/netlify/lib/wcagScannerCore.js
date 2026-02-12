@@ -514,7 +514,7 @@ async function captureScreenshotForPage(context, pageUrl, timeBudget) {
 }
 
 function buildOptions(input) {
-  const mode = input.mode === 'crawl' ? 'crawl' : 'single';
+  const mode = 'single';
   const ruleset = normalizeRuleset(input.ruleset);
   const includeBestPractices = Boolean(input.includeBestPractices);
   const includeExperimental = Boolean(input.includeExperimental);
@@ -533,9 +533,9 @@ function buildOptions(input) {
     includeScreenshots: Boolean(input.includeScreenshots ?? false),
     debug: Boolean(input.debug),
     resourceBlocking:
-      typeof input.resourceBlocking === 'boolean' ? input.resourceBlocking : mode === 'crawl',
+      typeof input.resourceBlocking === 'boolean' ? input.resourceBlocking : false,
     blockImages: Boolean(input.blockImages ?? false),
-    maxPages: mode === 'crawl' ? clampMaxPages(input.maxPages) : 1,
+    maxPages: 1,
     caps: {
       maxViolationsPerPage: clampInt(
         input.maxViolationsPerPage,
@@ -722,7 +722,7 @@ async function runWcagScan(input) {
         pagesAttempted: 0,
         pagesScanned: 0,
         truncated: true,
-        truncation: { timeBudget: false, maxPages: false, maxTotalIssues: false },
+        truncation: { timeBudget: false, maxTotalIssues: false },
         errorsSummary: { totalErrors: 1, totalTimeouts: 0, messages: ['Invalid start URL'] },
         caps: options.caps,
         engine: {
@@ -972,7 +972,6 @@ async function runWcagScan(input) {
     elapsedMs: durationMs,
     limits: {
       timeoutMs: timeBudget.totalBudgetMs,
-      maxPages: options.maxPages,
       maxDepth: MAX_DEPTH,
       maxViolationsPerPage: options.caps.maxViolationsPerPage,
       maxNodesPerViolation: options.caps.maxNodesPerViolation,
@@ -982,7 +981,6 @@ async function runWcagScan(input) {
     truncated: scanTruncated,
     truncation: {
       timeBudget: timeBudgetHit,
-      maxPages: maxPagesCapHit,
       maxTotalIssues: totalIssuesCapHit
     },
     pages: pagesSummary,
@@ -996,7 +994,6 @@ async function runWcagScan(input) {
       truncated: scanTruncated,
       truncation: {
         timeBudget: timeBudgetHit,
-        maxPages: maxPagesCapHit,
         maxTotalIssues: totalIssuesCapHit
       },
       errorsSummary,

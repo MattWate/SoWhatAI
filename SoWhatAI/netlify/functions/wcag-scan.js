@@ -24,8 +24,7 @@ export const handler = async (event, context) => {
 
   const {
     startUrl,
-    mode = 'single',
-    maxPages,
+    mode,
     includeScreenshots = false,
     timeoutMs,
     debug = false,
@@ -54,15 +53,14 @@ export const handler = async (event, context) => {
     return json(400, { error: 'startUrl must be a valid URL.' });
   }
 
-  if (mode !== 'single' && mode !== 'crawl') {
-    return json(400, { error: "mode must be 'single' or 'crawl'." });
+  if (mode && mode !== 'single') {
+    return json(400, { error: "Only 'single' mode is currently supported." });
   }
 
   try {
     const result = await runWcagScan({
       startUrl,
-      mode,
-      maxPages,
+      mode: 'single',
       includeScreenshots: Boolean(includeScreenshots),
       timeoutMs,
       debug: Boolean(debug),
@@ -87,7 +85,7 @@ export const handler = async (event, context) => {
       status: 'partial',
       message: 'Unexpected runtime error. Returning empty partial result.',
       service: 'LumenScan',
-      mode,
+      mode: 'single',
       startedAt: now,
       finishedAt: now,
       durationMs: 0,
@@ -104,7 +102,6 @@ export const handler = async (event, context) => {
         truncated: true,
         truncation: {
           timeBudget: false,
-          maxPages: false,
           maxTotalIssues: false
         },
         errorsSummary: {
