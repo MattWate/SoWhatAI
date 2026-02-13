@@ -475,8 +475,8 @@ export default function WcagScanPanel() {
           </div>
 
           <p className="text-xs text-gray-400">
-            Fixed profile: single-page WCAG 2.2 AA scan with best-practice and advanced rules, experimental off,
-            screenshots with markers, and full-page selector coverage. Accessibility testing powered by axe-core.
+            Snapshot profile: capture page HTML first, then run asynchronous WCAG 2.2 AA analysis (axe-core in JSDOM)
+            from the stored snapshot. Accessibility testing powered by axe-core.
           </p>
         </div>
 

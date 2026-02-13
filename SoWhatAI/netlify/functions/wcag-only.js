@@ -1,4 +1,4 @@
-const { handler: startWcagScanHandler } = require('./start-wcag-scan.js');
+const { handler: capturePageHandler } = require('./capture-page.js');
 
-// Backward-compatible alias: wcag-only now starts an async scan job and returns job metadata.
-exports.handler = startWcagScanHandler;
+// Backward compatibility: wcag-only now starts snapshot capture instead of synchronous live-site scanning.
+exports.handler = capturePageHandler;

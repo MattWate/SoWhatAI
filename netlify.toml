@@ -26,6 +26,18 @@
 [functions."wcag-only"]
   external_node_modules = ["@netlify/blobs"]
 
+[functions."capture-page"]
+  external_node_modules = ["@netlify/blobs"]
+
+[functions."analyze-snapshot"]
+  external_node_modules = ["@netlify/blobs"]
+
+[functions."analyze-snapshot-background"]
+  external_node_modules = ["axe-core", "jsdom", "@netlify/blobs"]
+
+[functions."snapshot-status"]
+  external_node_modules = ["@netlify/blobs"]
+
 [[redirects]]
   from = "/wcag-scan"
   to = "/index.html"
