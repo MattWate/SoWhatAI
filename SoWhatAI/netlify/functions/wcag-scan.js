@@ -470,12 +470,13 @@ async function runDerivedEngineTask({ engineKey, runner, timeoutMs, fallbackBuil
   };
 }
 
-async function runPsiTask({ startUrl, strategy, timeBudget }) {
+async function runPsiTask({ startUrl, strategy, apiKey, timeBudget }) {
   const timeoutMs = remainingTimeout(timeBudget, DEFAULT_PSI_TIMEOUT_MS);
   const execution = await runWithTimeout(
     getPsiResult({
       url: startUrl,
       strategy,
+      apiKey,
       timeoutMs
     }),
     timeoutMs + 400,
@@ -667,6 +668,7 @@ exports.handler = async (event, context) => {
   };
 
   const psiStrategy = normalizePsiStrategy(body.psiStrategy);
+  const psiApiKey = String(process.env.PAGESPEED_API_KEY || '').trim();
   const timeBudget = createTimeBudget(requestInput.totalBudgetMs, getTotalScanBudgetForMode(mode));
 
   try {
@@ -674,6 +676,7 @@ exports.handler = async (event, context) => {
     const psiPromise = runPsiTask({
       startUrl: requestInput.startUrl,
       strategy: psiStrategy,
+      apiKey: psiApiKey,
       timeBudget
     });
 

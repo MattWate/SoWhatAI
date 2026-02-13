@@ -177,6 +177,7 @@ async function getPsiResult({
 } = {}) {
   const normalizedUrl = normalizeHttpUrl(url);
   const normalizedStrategy = normalizeStrategy(strategy);
+  const normalizedApiKey = String(apiKey || '').trim();
   if (!normalizedUrl) {
     return {
       status: 'failed',
@@ -192,9 +193,25 @@ async function getPsiResult({
     };
   }
 
+  if (!normalizedApiKey) {
+    return {
+      status: 'failed',
+      error: 'missing_api_key',
+      message: 'PAGESPEED_API_KEY is not configured.',
+      blocked: false,
+      cacheHit: false,
+      fromCache: false,
+      psiCallsMade: 0,
+      psiCacheHits: 0,
+      strategy: normalizedStrategy,
+      fetchDurationMs: 0
+    };
+  }
+
   const cacheKey = `${normalizedStrategy}:${normalizedUrl}`;
   const now = Date.now();
   if (isQuotaBlocked(now)) {
+    console.log('PSI quota exceeded');
     return {
       status: 'failed',
       error: 'quota_exceeded',
@@ -233,9 +250,7 @@ async function getPsiResult({
   for (const category of PSI_CATEGORIES) {
     params.append('category', category);
   }
-  if (apiKey) {
-    params.set('key', apiKey);
-  }
+  params.set('key', normalizedApiKey);
 
   const endpoint = `${PSI_ENDPOINT}?${params.toString()}`;
   const controller = new AbortController();
@@ -243,6 +258,7 @@ async function getPsiResult({
     controller.abort();
   }, timeout);
   const startedAt = Date.now();
+  console.log('PSI request started', { url: normalizedUrl, strategy: normalizedStrategy });
 
   try {
     const response = await fetch(endpoint, {
@@ -269,6 +285,7 @@ async function getPsiResult({
       });
       if (error === 'quota_exceeded') {
         setQuotaBlocked(Date.now());
+        console.log('PSI quota exceeded');
       }
       return {
         status: 'failed',
@@ -305,6 +322,7 @@ async function getPsiResult({
     const error = classifyPsiError({ caughtError });
     if (error === 'quota_exceeded') {
       setQuotaBlocked(Date.now());
+      console.log('PSI quota exceeded');
     }
     const message =
       error === 'timeout'
