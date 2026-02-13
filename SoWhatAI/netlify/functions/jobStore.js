@@ -3,6 +3,7 @@ const JOB_KEY_PREFIX = 'job:';
 const JOB_TTL_MS = 30 * 60 * 1000;
 const MAX_ERROR_LENGTH = 280;
 
+// Local-development fallback only. In Netlify runtime we require Blobs.
 const memoryStore = (() => {
   const key = '__SOWHATAI_WCAG_JOB_STORE_V1__';
   if (!globalThis[key]) {
@@ -127,10 +128,17 @@ async function getBlobStore() {
       }
       return getStore(JOB_STORE_NAME);
     } catch (error) {
+      if (process.env.NETLIFY) {
+        throw new Error(
+          `Netlify Blobs is required in production jobStore. ${sanitizeText(error && error.message)}`
+        );
+      }
       if (!fallbackWarningShown) {
         fallbackWarningShown = true;
-        const mode = process.env.NETLIFY ? 'runtime fallback (not durable across cold starts)' : 'local dev fallback';
-        console.warn(`[jobStore] Netlify Blobs unavailable, using in-memory ${mode}.`, sanitizeText(error && error.message));
+        console.warn(
+          '[jobStore] Netlify Blobs unavailable, using in-memory local dev fallback.',
+          sanitizeText(error && error.message)
+        );
       }
       return null;
     }
