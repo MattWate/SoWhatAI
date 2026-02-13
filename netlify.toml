@@ -11,6 +11,18 @@
 [functions."wcag-scan"]
   external_node_modules = ["playwright-core", "@sparticuz/chromium", "axe-core"]
 
+[functions."run-wcag-scan"]
+  external_node_modules = ["playwright-core", "@sparticuz/chromium", "axe-core", "@netlify/blobs"]
+
+[functions."run-wcag-scan-background"]
+  external_node_modules = ["playwright-core", "@sparticuz/chromium", "axe-core", "@netlify/blobs"]
+
+[functions."start-wcag-scan"]
+  external_node_modules = ["@netlify/blobs"]
+
+[functions."wcag-scan-status"]
+  external_node_modules = ["@netlify/blobs"]
+
 [[redirects]]
   from = "/wcag-scan"
   to = "/index.html"
