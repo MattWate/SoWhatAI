@@ -241,6 +241,8 @@ export default function WcagScanPanel() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
+  const [scanJobId, setScanJobId] = useState('');
+  const [scanProgress, setScanProgress] = useState({ percent: 0, message: '' });
   const [selectedPageUrl, setSelectedPageUrl] = useState('');
   const [visibleIssueCount, setVisibleIssueCount] = useState(INITIAL_VISIBLE_ISSUES);
   const [impactFilter, setImpactFilter] = useState('all');
@@ -336,6 +338,8 @@ export default function WcagScanPanel() {
   const handleRun = async () => {
     setError('');
     setResult(null);
+    setScanJobId('');
+    setScanProgress({ percent: 0, message: '' });
     setSelectedPageUrl('');
 
     if (urlError) {
@@ -349,7 +353,17 @@ export default function WcagScanPanel() {
         startUrl: startUrl.trim()
       };
 
-      const scanResult = await runWcagScan(payload);
+      const scanResult = await runWcagScan(payload, {
+        onProgress: (jobStatus) => {
+          const progress = jobStatus?.progress || {};
+          setScanJobId(String(jobStatus?.jobId || ''));
+          setScanProgress({
+            percent: Number.isFinite(Number(progress.percent)) ? Number(progress.percent) : 0,
+            message: String(progress.message || '')
+          });
+        }
+      });
+      setScanProgress({ percent: 100, message: 'Scan completed.' });
       setResult(scanResult);
       if (scanResult?.pages?.length) {
         setSelectedPageUrl(scanResult.pages[0].url);
@@ -477,6 +491,28 @@ export default function WcagScanPanel() {
           </button>
           {running ? <span className="text-sm text-teal-300 animate-pulse">Scanning in progress...</span> : null}
         </div>
+
+        {running ? (
+          <div className="space-y-2 rounded border border-teal-800 bg-teal-950/20 p-3">
+            <div className="flex items-center justify-between gap-3 text-xs text-teal-200">
+              <span>{scanProgress.message || 'Running scan job...'}</span>
+              <span>{Math.max(0, Math.min(100, Math.round(Number(scanProgress.percent) || 0))}%</span>
+            </div>
+            <div className="h-2 w-full rounded bg-gray-800 overflow-hidden">
+              <div
+                className="h-full bg-teal-500 transition-all duration-300"
+                style={{
+                  width: `${Math.max(0, Math.min(100, Math.round(Number(scanProgress.percent) || 0)))}%`
+                }}
+              />
+            </div>
+            {scanJobId ? <p className="text-[11px] text-teal-300">Job ID: {scanJobId}</p> : null}
+          </div>
+        ) : null}
+
+        {!running && scanJobId ? (
+          <p className="text-[11px] text-gray-500">Last job: {scanJobId}</p>
+        ) : null}
 
         {error ? <p className="text-sm text-red-400">{error}</p> : null}
       </div>
