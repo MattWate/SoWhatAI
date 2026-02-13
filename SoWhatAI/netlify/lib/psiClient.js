@@ -3,6 +3,16 @@ const DEFAULT_TIMEOUT_MS = 12000;
 const MIN_TIMEOUT_MS = 4000;
 const MAX_TIMEOUT_MS = 20000;
 const MAX_ERROR_MESSAGE = 260;
+const PSI_CACHE_TTL_MS = 30 * 60 * 1000;
+const DEFAULT_PSI_CATEGORIES = ['performance', 'seo', 'best-practices'];
+
+const psiCache = (() => {
+  const key = '__SOWHATAI_PSI_CACHE_V1__';
+  if (!globalThis[key]) {
+    globalThis[key] = new Map();
+  }
+  return globalThis[key];
+})();
 
 function clampTimeout(timeoutMs) {
   const numeric = Number(timeoutMs);
@@ -13,6 +23,36 @@ function clampTimeout(timeoutMs) {
 function sanitizeErrorMessage(error) {
   const raw = error?.message || String(error || 'Unknown error');
   return String(raw).replace(/\s+/g, ' ').trim().slice(0, MAX_ERROR_MESSAGE);
+}
+
+function classifyPsiError({ status, message, caughtError }) {
+  const text = String(message || caughtError?.message || '').toLowerCase();
+  if (status === 429 || (text.includes('quota') && text.includes('exceed'))) {
+    return 'quota_exceeded';
+  }
+  if (caughtError?.name === 'AbortError' || text.includes('timed out')) {
+    return 'timeout';
+  }
+  if (
+    text.includes('failed to fetch') ||
+    text.includes('networkerror') ||
+    text.includes('econn') ||
+    text.includes('enotfound')
+  ) {
+    return 'network';
+  }
+  return 'unknown';
+}
+
+function normalizeHttpUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return null;
+  }
 }
 
 function toScore(rawScore) {
@@ -148,9 +188,132 @@ async function fetchPsiPayload({
   }
 }
 
+async function getPsiResult({
+  url,
+  strategy = 'mobile',
+  apiKey = process.env.PAGESPEED_API_KEY || '',
+  timeoutMs = DEFAULT_TIMEOUT_MS
+} = {}) {
+  const normalizedUrl = normalizeHttpUrl(url);
+  const normalizedStrategy = String(strategy || '').toLowerCase() === 'desktop' ? 'desktop' : 'mobile';
+  if (!normalizedUrl) {
+    return {
+      status: 'failed',
+      error: 'unknown',
+      message: 'Invalid PSI URL input.',
+      psiCallsMade: 0,
+      psiCacheHits: 0,
+      fromCache: false,
+      strategy: normalizedStrategy
+    };
+  }
+
+  const cacheKey = `${normalizedStrategy}:${normalizedUrl}`;
+  const now = Date.now();
+  const cached = psiCache.get(cacheKey);
+  if (cached && now - cached.ts < PSI_CACHE_TTL_MS && cached.data) {
+    return {
+      status: 'success',
+      data: cached.data,
+      message: 'PSI cache hit.',
+      psiCallsMade: 0,
+      psiCacheHits: 1,
+      fromCache: true,
+      strategy: normalizedStrategy,
+      fetchDurationMs: 0
+    };
+  }
+
+  const timeout = clampTimeout(timeoutMs);
+  const params = new URLSearchParams({
+    url: normalizedUrl,
+    strategy: normalizedStrategy
+  });
+  for (const category of DEFAULT_PSI_CATEGORIES) {
+    params.append('category', category);
+  }
+  if (apiKey) {
+    params.set('key', apiKey);
+  }
+
+  const endpoint = `${PSI_ENDPOINT}?${params.toString()}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeout);
+  const startedAt = Date.now();
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal
+    });
+    const text = await response.text();
+    let payload = {};
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = {};
+      }
+    }
+
+    if (!response.ok) {
+      const message =
+        payload?.error?.message || `PSI request failed with status ${response.status}.`;
+      const error = classifyPsiError({ status: response.status, message });
+      return {
+        status: 'failed',
+        error,
+        message: sanitizeErrorMessage(message),
+        psiCallsMade: 1,
+        psiCacheHits: 0,
+        fromCache: false,
+        strategy: normalizedStrategy,
+        fetchDurationMs: Date.now() - startedAt
+      };
+    }
+
+    psiCache.set(cacheKey, {
+      ts: Date.now(),
+      data: payload
+    });
+    return {
+      status: 'success',
+      data: payload,
+      message: 'PSI request completed.',
+      psiCallsMade: 1,
+      psiCacheHits: 0,
+      fromCache: false,
+      strategy: normalizedStrategy,
+      fetchDurationMs: Date.now() - startedAt
+    };
+  } catch (caughtError) {
+    const error = classifyPsiError({ caughtError });
+    const message =
+      error === 'timeout'
+        ? `PSI request timed out after ${timeout}ms.`
+        : sanitizeErrorMessage(caughtError);
+    return {
+      status: 'failed',
+      error,
+      message,
+      psiCallsMade: 1,
+      psiCacheHits: 0,
+      fromCache: false,
+      strategy: normalizedStrategy,
+      fetchDurationMs: Date.now() - startedAt
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export {
   buildCategoryIssues,
   fetchPsiPayload,
+  getPsiResult,
   getCategoryScore,
   sanitizeErrorMessage,
   stripHtml
