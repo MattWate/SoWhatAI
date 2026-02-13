@@ -24,7 +24,7 @@ const MAX_FAILURE_SUMMARY_LENGTH = 500;
 const MAX_SELECTOR_COUNT = 6;
 const MAX_SELECTOR_LENGTH = 220;
 
-const DEFAULT_SINGLE_PAGE_SCAN_BUDGET_MS = 26000;
+const DEFAULT_SINGLE_PAGE_SCAN_BUDGET_MS = 29000;
 const DEFAULT_CRAWL_PAGE_SCAN_BUDGET_MS = 15000;
 const MIN_TIME_TO_START_NEW_PAGE_MS = 3500;
 const LOAD_STATE_CAP_MS = 5000;
@@ -546,14 +546,33 @@ function buildErrorsSummary(pageSummaries, globalErrors) {
   const totalTimeouts = pageSummaries.filter((p) => p.status === 'timeout').length;
   const totalErrors = pageSummaries.filter((p) => p.status === 'error').length;
   const messages = [];
+  const seenDisplay = new Set();
+  const pageErrorTexts = new Set();
+
+  const normalize = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+  const pushDisplay = (value) => {
+    const text = normalize(value);
+    if (!text) return;
+    const key = text.toLowerCase();
+    if (seenDisplay.has(key)) return;
+    seenDisplay.add(key);
+    messages.push(text);
+  };
+
   for (const page of pageSummaries) {
-    if (page.error) messages.push(`${page.url}: ${page.error}`);
+    const pageError = normalize(page?.error);
+    if (!pageError) continue;
+    pageErrorTexts.add(pageError.toLowerCase());
+    pushDisplay(`${page.url}: ${pageError}`);
     if (messages.length >= 8) break;
   }
   for (const err of globalErrors) {
-    if (!err) continue;
-    messages.push(String(err));
     if (messages.length >= 8) break;
+    if (!err) continue;
+    const normalizedError = normalize(err);
+    if (!normalizedError) continue;
+    if (pageErrorTexts.has(normalizedError.toLowerCase())) continue;
+    pushDisplay(normalizedError);
   }
   return {
     totalErrors,
@@ -760,6 +779,8 @@ function buildOptions(input) {
   const includeBestPractices = true;
   const includeExperimental = false;
   const includeScreenshots = input.includeScreenshots == null ? true : Boolean(input.includeScreenshots);
+  const includePerformanceAudit =
+    input.includePerformanceAudit == null ? true : Boolean(input.includePerformanceAudit);
   const maxPages = mode === 'crawl' ? clampMaxPages(input.maxPages) : 1;
   const timeoutMs = clampTimeout(input.timeoutMs, mode);
   const pageScanBudgetMs = clampPageScanBudget(input.pageScanBudgetMs, mode);
@@ -776,6 +797,7 @@ function buildOptions(input) {
       excludeSelectors: []
     },
     includeScreenshots,
+    includePerformanceAudit,
     debug: false,
     resourceBlocking: false,
     blockImages: false,
@@ -815,7 +837,8 @@ async function scanPage({
   scope,
   caps,
   timeBudget,
-  pageScanBudgetMs
+  pageScanBudgetMs,
+  includePerformanceAudit
 }) {
   const pageStartedAt = Date.now();
   let page = null;
@@ -864,9 +887,15 @@ async function scanPage({
       timings.engineMs = Date.now() - engineStart;
 
       const heuristics = await runHeuristics(page);
-      const performanceStart = Date.now();
-      const performanceAudit = await collectPerformanceAudit(page, pageUrl);
-      timings.performanceMs = Date.now() - performanceStart;
+      let performanceAudit = {
+        issues: [],
+        summary: summarizePerformanceIssues([])
+      };
+      if (includePerformanceAudit) {
+        const performanceStart = Date.now();
+        performanceAudit = await collectPerformanceAudit(page, pageUrl);
+        timings.performanceMs = Date.now() - performanceStart;
+      }
       const violations = Array.isArray(engineResult.violations)
         ? [...engineResult.violations].sort(compareViolations)
         : [];
@@ -1076,7 +1105,8 @@ async function runWcagScan(input) {
         scope: options.scope,
         caps: options.caps,
         timeBudget,
-        pageScanBudgetMs: options.pageScanBudgetMs
+        pageScanBudgetMs: options.pageScanBudgetMs,
+        includePerformanceAudit: options.includePerformanceAudit
       });
 
       if (pageResult.status === 'ok') {
