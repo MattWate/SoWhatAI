@@ -23,6 +23,9 @@
 [functions."wcag-scan-status"]
   external_node_modules = ["@netlify/blobs"]
 
+[functions."wcag-only"]
+  external_node_modules = ["@netlify/blobs"]
+
 [[redirects]]
   from = "/wcag-scan"
   to = "/index.html"

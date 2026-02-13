@@ -7,7 +7,7 @@ const MIN_TIMEOUT_MS = 10000;
 const MAX_TIMEOUT_MS = 180000;
 const DEFAULT_CRAWL_MAX_PAGES = 3;
 const MAX_CRAWL_MAX_PAGES = 10;
-const BACKGROUND_TRIGGER_TIMEOUT_MS = 5000;
+const BACKGROUND_TRIGGER_TIMEOUT_MS = 1200;
 
 function json(statusCode, body) {
   return {
