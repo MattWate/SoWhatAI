@@ -1,6 +1,6 @@
 const DEFAULT_TIMEOUT_MS = 10000;
 const MIN_TIMEOUT_MS = 1000;
-const MAX_TIMEOUT_MS = 45000;
+const MAX_TIMEOUT_MS = 60000;
 
 function clampTimeout(timeoutMs, fallbackMs = DEFAULT_TIMEOUT_MS) {
   const fallback = Number.isFinite(Number(fallbackMs))

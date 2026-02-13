@@ -4,12 +4,21 @@ const MIN_TIMEOUT_MS = 3000;
 const MAX_TIMEOUT_MS = 20000;
 const MAX_ERROR_MESSAGE = 260;
 const PSI_CACHE_TTL_MS = 30 * 60 * 1000;
+const PSI_QUOTA_BLOCK_MAX_MS = 12 * 60 * 60 * 1000;
 const PSI_CATEGORIES = ['performance', 'seo', 'best-practices'];
 
 const psiCache = (() => {
   const key = '__SOWHATAI_PSI_CACHE_V2__';
   if (!globalThis[key]) {
     globalThis[key] = new Map();
+  }
+  return globalThis[key];
+})();
+
+const psiQuotaCircuit = (() => {
+  const key = '__SOWHATAI_PSI_QUOTA_CIRCUIT_V1__';
+  if (!globalThis[key]) {
+    globalThis[key] = { blockedUntil: 0 };
   }
   return globalThis[key];
 })();
@@ -43,6 +52,39 @@ function normalizeHttpUrl(rawUrl) {
 function isQuotaExceededText(value) {
   const text = String(value || '').toLowerCase();
   return text.includes('quota exceeded');
+}
+
+function getNextUtcMidnightMs(nowMs) {
+  const now = new Date(nowMs);
+  return Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + 1,
+    0,
+    0,
+    0,
+    0
+  );
+}
+
+function computeQuotaBlockedUntil(nowMs = Date.now()) {
+  const nextMidnight = getNextUtcMidnightMs(nowMs);
+  const maxByTtl = nowMs + PSI_QUOTA_BLOCK_MAX_MS;
+  return Math.min(nextMidnight, maxByTtl);
+}
+
+function isQuotaBlocked(nowMs = Date.now()) {
+  const blockedUntil = Number(psiQuotaCircuit.blockedUntil) || 0;
+  if (blockedUntil <= nowMs) {
+    psiQuotaCircuit.blockedUntil = 0;
+    return false;
+  }
+  return true;
+}
+
+function setQuotaBlocked(nowMs = Date.now()) {
+  const blockedUntil = computeQuotaBlockedUntil(nowMs);
+  psiQuotaCircuit.blockedUntil = Math.max(Number(psiQuotaCircuit.blockedUntil) || 0, blockedUntil);
 }
 
 function classifyPsiError({ status = 0, responseText = '', apiMessage = '', caughtError = null } = {}) {
@@ -140,6 +182,7 @@ async function getPsiResult({
       status: 'failed',
       error: 'unknown',
       message: 'Invalid PSI URL input.',
+      blocked: false,
       cacheHit: false,
       fromCache: false,
       psiCallsMade: 0,
@@ -151,12 +194,28 @@ async function getPsiResult({
 
   const cacheKey = `${normalizedStrategy}:${normalizedUrl}`;
   const now = Date.now();
+  if (isQuotaBlocked(now)) {
+    return {
+      status: 'failed',
+      error: 'quota_exceeded',
+      message: 'PSI quota circuit breaker active. Skipping network request.',
+      blocked: true,
+      cacheHit: false,
+      fromCache: false,
+      psiCallsMade: 0,
+      psiCacheHits: 0,
+      strategy: normalizedStrategy,
+      fetchDurationMs: 0
+    };
+  }
+
   const cached = psiCache.get(cacheKey);
   if (cached && now - cached.ts < PSI_CACHE_TTL_MS && cached.data) {
     return {
       status: 'success',
       data: cached.data,
       message: 'PSI cache hit.',
+      blocked: false,
       cacheHit: true,
       fromCache: true,
       psiCallsMade: 0,
@@ -208,10 +267,14 @@ async function getPsiResult({
         responseText,
         apiMessage
       });
+      if (error === 'quota_exceeded') {
+        setQuotaBlocked(Date.now());
+      }
       return {
         status: 'failed',
         error,
         message: sanitizeErrorMessage(apiMessage),
+        blocked: error === 'quota_exceeded',
         cacheHit: false,
         fromCache: false,
         psiCallsMade: 1,
@@ -230,6 +293,7 @@ async function getPsiResult({
       status: 'success',
       data: payload,
       message: 'PSI request completed.',
+      blocked: false,
       cacheHit: false,
       fromCache: false,
       psiCallsMade: 1,
@@ -239,6 +303,9 @@ async function getPsiResult({
     };
   } catch (caughtError) {
     const error = classifyPsiError({ caughtError });
+    if (error === 'quota_exceeded') {
+      setQuotaBlocked(Date.now());
+    }
     const message =
       error === 'timeout'
         ? `PSI request timed out after ${timeout}ms.`
@@ -247,6 +314,7 @@ async function getPsiResult({
       status: 'failed',
       error,
       message,
+      blocked: error === 'quota_exceeded',
       cacheHit: false,
       fromCache: false,
       psiCallsMade: 1,
@@ -255,6 +323,9 @@ async function getPsiResult({
       fetchDurationMs: Date.now() - startedAt
     };
   } finally {
+    if (psiQuotaCircuit.blockedUntil <= Date.now()) {
+      psiQuotaCircuit.blockedUntil = 0;
+    }
     clearTimeout(timeoutId);
   }
 }

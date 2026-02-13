@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import pptxgen from 'pptxgenjs';
+import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
+import * as mammoth from 'mammoth/mammoth.browser';
 
 // --- PPTX Generation Function ---
 const generatePPTX = (results) => {
@@ -126,13 +129,13 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) =>
           reader.readAsText(file);
 
         } else if (file.name.toLowerCase().endsWith('.docx')) {
-          if (!window.mammoth) {
+          if (!mammoth || typeof mammoth.extractRawText !== 'function') {
             warn('Word (.docx) support is not available. Please ensure Mammoth is loaded.');
             return resolve(null);
           }
           const reader = new FileReader();
           reader.onload = (e) => {
-            window.mammoth
+            mammoth
               .extractRawText({ arrayBuffer: e.target.result })
               .then(result =>
                 resolve({ id: fileId, name: file.name, type: 'text', content: result.value })
@@ -272,14 +275,14 @@ const MappingModal = ({ file, onClose, onSave }) => {
     };
 
     if (file.fileObject.name.toLowerCase().endsWith('.csv')) {
-      if (!window.Papa) {
+      if (!Papa || typeof Papa.parse !== 'function') {
         alert('CSV parser (PapaParse) is not loaded.');
         setIsLoading(false);
         return;
       }
-      window.Papa.parse(file.fileObject, { header: true, skipEmptyLines: true, complete: (results) => processData(results.data) });
+      Papa.parse(file.fileObject, { header: true, skipEmptyLines: true, complete: (results) => processData(results.data) });
     } else {
-      if (!window.XLSX) {
+      if (!XLSX || typeof XLSX.read !== 'function') {
         alert('XLSX parser is not loaded.');
         setIsLoading(false);
         return;
@@ -287,10 +290,10 @@ const MappingModal = ({ file, onClose, onSave }) => {
       const reader = new FileReader();
       reader.onload = (e) => {
         const data = new Uint8Array(e.target.result);
-        const workbook = window.XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const json = window.XLSX.utils.sheet_to_json(worksheet);
+        const json = XLSX.utils.sheet_to_json(worksheet);
         processData(json);
       };
       reader.readAsArrayBuffer(file.fileObject);

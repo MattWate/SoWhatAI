@@ -3,6 +3,9 @@ import { supabase } from './supabaseClient.js';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import PptxGenJS from 'pptxgenjs';
+import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
+import * as mammoth from 'mammoth/mammoth.browser';
 import WcagScanPage from './pages/WcagScanPage.jsx';
 
 /* =========================================================
@@ -325,10 +328,10 @@ const FileUploadPage = ({ dataSet, setDataSet, onNext, onDashboardNavigate }) =>
           reader.onload = (e) => resolve({ id: fileId, name: file.name, type: 'text', content: e.target.result, category: 'general' });
           reader.readAsText(file);
         } else if (/\.docx?$/i.test(file.name)) {
-          if (window.mammoth) {
+          if (mammoth && typeof mammoth.extractRawText === 'function') {
             const reader = new FileReader();
             reader.onload = (e) => {
-              window.mammoth.extractRawText({ arrayBuffer: e.target.result })
+              mammoth.extractRawText({ arrayBuffer: e.target.result })
                 .then(result => resolve({ id: fileId, name: file.name, type: 'text', content: result.value, category: 'general' }))
                 .catch(() => resolve(null));
             };
@@ -450,7 +453,6 @@ const MappingModal = ({ file, onClose, onSave }) => {
   };
 
   useEffect(() => {
-    if (!window.Papa || !window.XLSX) return;
     setIsLoading(true);
 
     const processData = (data) => {
@@ -468,15 +470,15 @@ const MappingModal = ({ file, onClose, onSave }) => {
     };
 
     if (/\.csv$/i.test(file.fileObject.name)) {
-      window.Papa.parse(file.fileObject, { header: true, skipEmptyLines: true, complete: (results) => processData(results.data) });
+      Papa.parse(file.fileObject, { header: true, skipEmptyLines: true, complete: (results) => processData(results.data) });
     } else if (/\.(xls|xlsx)$/i.test(file.fileObject.name)) {
       const reader = new FileReader();
       reader.onload = (e) => {
         const data = new Uint8Array(e.target.result);
-        const workbook = window.XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const json = window.XLSX.utils.sheet_to_json(worksheet);
+        const json = XLSX.utils.sheet_to_json(worksheet);
         processData(json);
       };
       reader.readAsArrayBuffer(file.fileObject);
@@ -550,16 +552,10 @@ const ConfigurationPage = ({ dataSet, setDataSet, onAnalyze, onBack, error }) =>
     const needsXLS = dataSet.some(f => /\.(xls|xlsx)$/i.test(f.name));
     const needsDocx = dataSet.some(f => /\.docx?$/i.test(f.name));
 
-    let timerId;
-    const checkLibs = () => {
-      const papaReady = !needsCSV || window.Papa;
-      const xlsxReady = !needsXLS || window.XLSX;
-      const mammothReady = !needsDocx || window.mammoth;
-      if (papaReady && xlsxReady && mammothReady) setIsDataReady(true);
-      else timerId = setTimeout(checkLibs, 100);
-    };
-    checkLibs();
-    return () => clearTimeout(timerId);
+    const papaReady = !needsCSV || (Papa && typeof Papa.parse === 'function');
+    const xlsxReady = !needsXLS || (XLSX && typeof XLSX.read === 'function');
+    const mammothReady = !needsDocx || (mammoth && typeof mammoth.extractRawText === 'function');
+    setIsDataReady(Boolean(papaReady && xlsxReady && mammothReady));
   }, [dataSet]);
 
   const handleComponentChange = (e) => {

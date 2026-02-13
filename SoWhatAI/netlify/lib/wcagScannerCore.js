@@ -4,9 +4,9 @@ import { SCAN_ENGINE_NAME, collectEngineViolations, selectEngineRules } from './
 import { collectPerformanceAudit, summarizePerformanceIssues } from './performanceAudit.js';
 
 const MAX_TIMEOUT_MS = 45000;
-const DEFAULT_SINGLE_TIMEOUT_MS = 28000;
-const DEFAULT_CRAWL_TIMEOUT_MS = 35000;
-const DEFAULT_MAX_PAGES = 5;
+const DEFAULT_SINGLE_TIMEOUT_MS = 30000;
+const DEFAULT_CRAWL_TIMEOUT_MS = 45000;
+const DEFAULT_MAX_PAGES = 3;
 const MAX_PAGES = 10;
 const MAX_DEPTH = 2;
 
@@ -24,12 +24,12 @@ const MAX_FAILURE_SUMMARY_LENGTH = 500;
 const MAX_SELECTOR_COUNT = 6;
 const MAX_SELECTOR_LENGTH = 220;
 
-const DEFAULT_PAGE_SCAN_BUDGET_MS = 12000;
-const MIN_TIME_TO_START_NEW_PAGE_MS = 2200;
+const DEFAULT_SINGLE_PAGE_SCAN_BUDGET_MS = 26000;
+const DEFAULT_CRAWL_PAGE_SCAN_BUDGET_MS = 15000;
+const MIN_TIME_TO_START_NEW_PAGE_MS = 3500;
 const LOAD_STATE_CAP_MS = 5000;
 const DEFAULT_ENGINE_TIMEOUT_MS = 12000;
 const SCREENSHOT_CAPTURE_BUDGET_MS = 9000;
-const FIXED_SCAN_TIMEOUT_MS = 45000;
 const PAGE_PREP_SCROLL_STEP_PX = 900;
 const PAGE_PREP_SCROLL_SETTLE_MS = 180;
 const PAGE_PREP_MAX_SCROLL_STEPS = 50;
@@ -71,6 +71,15 @@ function clampTimeout(timeoutMs, mode) {
   const numeric = Number(timeoutMs);
   if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
   return Math.min(MAX_TIMEOUT_MS, Math.max(5000, Math.floor(numeric)));
+}
+
+function clampPageScanBudget(timeoutMs, mode) {
+  const fallback = mode === 'crawl'
+    ? DEFAULT_CRAWL_PAGE_SCAN_BUDGET_MS
+    : DEFAULT_SINGLE_PAGE_SCAN_BUDGET_MS;
+  const numeric = Number(timeoutMs);
+  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
+  return Math.max(2500, Math.min(MAX_TIMEOUT_MS, Math.floor(numeric)));
 }
 
 function clampMaxPages(maxPages) {
@@ -752,6 +761,8 @@ function buildOptions(input) {
   const includeExperimental = false;
   const includeScreenshots = input.includeScreenshots == null ? true : Boolean(input.includeScreenshots);
   const maxPages = mode === 'crawl' ? clampMaxPages(input.maxPages) : 1;
+  const timeoutMs = clampTimeout(input.timeoutMs, mode);
+  const pageScanBudgetMs = clampPageScanBudget(input.pageScanBudgetMs, mode);
   const profileTags = buildProfileTags(ruleset, includeBestPractices, includeExperimental);
   return {
     mode,
@@ -768,7 +779,8 @@ function buildOptions(input) {
     debug: false,
     resourceBlocking: false,
     blockImages: false,
-    timeoutMs: FIXED_SCAN_TIMEOUT_MS,
+    timeoutMs,
+    pageScanBudgetMs,
     maxPages,
     caps: {
       maxViolationsPerPage: clampInt(
@@ -802,7 +814,8 @@ async function scanPage({
   engineRules,
   scope,
   caps,
-  timeBudget
+  timeBudget,
+  pageScanBudgetMs
 }) {
   const pageStartedAt = Date.now();
   let page = null;
@@ -817,7 +830,7 @@ async function scanPage({
     const remaining = timeBudget.remainingMs();
     const pageBudgetMs = Math.max(
       1200,
-      Math.min(DEFAULT_PAGE_SCAN_BUDGET_MS, Math.max(1200, remaining - 700))
+      Math.min(pageScanBudgetMs, Math.max(1200, remaining - 700))
     );
 
     const work = async () => {
@@ -826,7 +839,7 @@ async function scanPage({
       await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: navTimeout });
       await preparePageForChecks(
         page,
-        Math.max(1600, Math.min(DEFAULT_PAGE_SCAN_BUDGET_MS, timeBudget.remainingMs() - 300))
+        Math.max(1600, Math.min(pageScanBudgetMs, timeBudget.remainingMs() - 300))
       );
       timings.navigationMs = Date.now() - navStart;
 
@@ -1062,7 +1075,8 @@ async function runWcagScan(input) {
         engineRules: options.engineRules,
         scope: options.scope,
         caps: options.caps,
-        timeBudget
+        timeBudget,
+        pageScanBudgetMs: options.pageScanBudgetMs
       });
 
       if (pageResult.status === 'ok') {
@@ -1094,6 +1108,7 @@ async function runWcagScan(input) {
       issues.push(...acceptedIssues);
 
       const pageTruncated =
+        pageResult.status === 'timeout' ||
         pageResult.pageTruncatedBy.violations ||
         pageResult.pageTruncatedBy.nodes ||
         totalIssuesTruncated;
@@ -1112,6 +1127,7 @@ async function runWcagScan(input) {
         error: pageResult.error || null,
         truncated: pageTruncated,
         truncatedBy: {
+          timeout: pageResult.status === 'timeout',
           violations: pageResult.pageTruncatedBy.violations,
           nodes: pageResult.pageTruncatedBy.nodes,
           totalIssues: totalIssuesTruncated
@@ -1204,6 +1220,8 @@ async function runWcagScan(input) {
   let message = '';
   if (status === 'partial' && breakReason === 'time_budget_low') {
     message = `Time budget exceeded at ${timeBudget.totalBudgetMs}ms. Returning partial results.`;
+  } else if (status === 'partial' && pagesSummary.some((page) => page.status === 'timeout')) {
+    message = 'One or more pages timed out. Returning partial results.';
   } else if (breakReason === 'max_total_issues_overall') {
     message = 'Issue cap reached. Additional issues were not returned.';
   } else if (breakReason === 'max_pages_reached') {
