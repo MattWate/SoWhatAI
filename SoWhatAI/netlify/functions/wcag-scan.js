@@ -78,6 +78,10 @@ function normalizePsiStrategy(value) {
   return String(value || '').toLowerCase() === 'desktop' ? 'desktop' : DEFAULT_PSI_STRATEGY;
 }
 
+function normalizeRunPsi(value) {
+  return value !== false;
+}
+
 function normalizeHttpUrl(rawUrl) {
   try {
     const parsed = new URL(rawUrl);
@@ -668,17 +672,30 @@ exports.handler = async (event, context) => {
   };
 
   const psiStrategy = normalizePsiStrategy(body.psiStrategy);
+  const runPsi = normalizeRunPsi(body.runPsi);
   const psiApiKey = String(process.env.PAGESPEED_API_KEY || '').trim();
   const timeBudget = createTimeBudget(requestInput.totalBudgetMs, getTotalScanBudgetForMode(mode));
 
   try {
     const accessibilityPromise = runAccessibilityTask({ requestInput, timeBudget });
-    const psiPromise = runPsiTask({
-      startUrl: requestInput.startUrl,
-      strategy: psiStrategy,
-      apiKey: psiApiKey,
-      timeBudget
-    });
+    const psiPromise = runPsi
+      ? runPsiTask({
+          startUrl: requestInput.startUrl,
+          strategy: psiStrategy,
+          apiKey: psiApiKey,
+          timeBudget
+        })
+      : Promise.resolve({
+          status: 'failed',
+          error: 'disabled',
+          message: 'PSI disabled for this scan.',
+          cacheHit: false,
+          fromCache: false,
+          psiCallsMade: 0,
+          psiCacheHits: 0,
+          fetchDurationMs: 0,
+          strategy: psiStrategy
+        });
 
     const performancePromise = runDerivedEngineTask({
       engineKey: 'performance',
@@ -922,7 +939,8 @@ exports.handler = async (event, context) => {
             ? performance.summary
             : accessibilityMeta.performance || null,
         request: requestInput,
-        totalBudgetMs: requestInput.totalBudgetMs
+        totalBudgetMs: requestInput.totalBudgetMs,
+        runPsi
       },
       pages,
       issues,
