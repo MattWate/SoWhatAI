@@ -7,6 +7,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import * as mammoth from 'mammoth/mammoth.browser';
 import WcagScanPage from './pages/WcagScanPage.jsx';
+import PageSpeedScanPage from './pages/PageSpeedScanPage.jsx';
 
 /* =========================================================
   Supabase helpers (CRUD)
@@ -142,7 +143,7 @@ const HomePage = ({ onNavigate }) => (
       The all-in-one research platform for UX & CX professionals. Aggregate feedback, analyse sentiment, and share
       actionable insights with your team, faster than ever before.
     </p>
-    <div className="mt-10 flex items-center justify-center gap-x-6">
+    <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
       <button
         onClick={() => onNavigate('login')}
         className="px-6 py-3 text-base font-semibold text-black bg-[#EDC8FF] rounded-md shadow-lg hover:bg-purple-200 transition-colors transform hover:scale-105"
@@ -153,7 +154,13 @@ const HomePage = ({ onNavigate }) => (
         onClick={() => onNavigate('wcag-scan')}
         className="px-6 py-3 text-base font-semibold text-white bg-gray-800 border border-gray-600 rounded-md shadow-lg hover:bg-gray-700 transition-colors"
       >
-        WCAG Scan
+        WCAG Accessibility Scan
+      </button>
+      <button
+        onClick={() => onNavigate('pagespeed-scan')}
+        className="px-6 py-3 text-base font-semibold text-white bg-gray-800 border border-gray-600 rounded-md shadow-lg hover:bg-gray-700 transition-colors"
+      >
+        PageSpeed Scan
       </button>
     </div>
     <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
@@ -174,11 +181,15 @@ const HomePage = ({ onNavigate }) => (
 );
 
 const pageFromPath = (pathname) => {
-  return pathname === '/wcag-scan' ? 'wcag-scan' : 'home';
+  if (pathname === '/wcag-scan') return 'wcag-scan';
+  if (pathname === '/pagespeed-scan') return 'pagespeed-scan';
+  return 'home';
 };
 
 const pathFromPage = (page) => {
-  return page === 'wcag-scan' ? '/wcag-scan' : '/';
+  if (page === 'wcag-scan') return '/wcag-scan';
+  if (page === 'pagespeed-scan') return '/pagespeed-scan';
+  return '/';
 };
 
 /* ---------------- Login ---------------- */
@@ -1768,6 +1779,8 @@ export default function App() {
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         {page === 'wcag-scan' ? (
           <WcagScanPage onNavigate={handleNavigate} />
+        ) : page === 'pagespeed-scan' ? (
+          <PageSpeedScanPage onNavigate={handleNavigate} />
         ) : user ? (
           page === 'app' ? (
             <AnalysisToolPage

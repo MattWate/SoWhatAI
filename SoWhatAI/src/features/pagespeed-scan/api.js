@@ -1,5 +1,5 @@
-export async function runWcagScan(payload, { signal } = {}) {
-  const response = await fetch('/.netlify/functions/wcag-only', {
+export async function runPageSpeedScan(payload, { signal } = {}) {
+  const response = await fetch('/.netlify/functions/pagespeed-scan', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -14,7 +14,7 @@ export async function runWcagScan(payload, { signal } = {}) {
   }
 
   if (!response.ok) {
-    const message = data?.error || `WCAG scan failed (${response.status})`;
+    const message = data?.error || `PageSpeed scan failed (${response.status})`;
     throw new Error(message);
   }
 
