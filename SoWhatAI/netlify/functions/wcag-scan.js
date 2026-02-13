@@ -1,15 +1,18 @@
 import axe from 'axe-core';
 import { runWcagScan } from '../lib/wcagScannerCore.js';
-import { getPsiResult, sanitizeErrorMessage } from '../lib/psiClient.js';
-import { runPerformanceEngine } from '../lib/performanceEngine.js';
-import { runSeoEngine } from '../lib/seoEngine.js';
-import { runBestPracticesEngine } from '../lib/bestPracticesEngine.js';
+import { getPsiResult, sanitizeErrorMessage } from './psiClient.js';
+import { runPerformanceEngine } from './performanceEngine.js';
+import { runSeoEngine } from './seoEngine.js';
+import { runBestPracticesEngine } from './bestPracticesEngine.js';
+import { runWithTimeout } from './runWithTimeout.js';
 
 const TOTAL_SCAN_BUDGET_MS = 20000;
-const DEFAULT_ACCESSIBILITY_TIMEOUT_MS = 17000;
+const DEFAULT_ACCESSIBILITY_TIMEOUT_MS = 15000;
 const DEFAULT_PSI_TIMEOUT_MS = 10000;
 const DEFAULT_ENGINE_TIMEOUT_MS = 9000;
 const DEFAULT_PSI_STRATEGY = 'mobile';
+const DEFAULT_CRAWL_MAX_PAGES = 3;
+const CRAWL_SAFETY_THRESHOLD_MS = 3500;
 const MIN_TIMEOUT_MS = 2500;
 const MAX_TIMEOUT_MS = 20000;
 const MAX_ERROR_LENGTH = 260;
@@ -50,7 +53,7 @@ function normalizeMode(mode) {
 function normalizeMaxPages(mode, maxPages) {
   if (mode !== 'crawl') return 1;
   const numeric = Number(maxPages);
-  if (!Number.isFinite(numeric) || numeric <= 0) return 5;
+  if (!Number.isFinite(numeric) || numeric <= 0) return DEFAULT_CRAWL_MAX_PAGES;
   return Math.min(10, Math.max(1, Math.floor(numeric)));
 }
 
@@ -93,40 +96,6 @@ function createTimeBudget(totalMs) {
 function remainingTimeout(timeBudget, fallbackMs) {
   const remaining = Math.max(MIN_TIMEOUT_MS, timeBudget.remainingMs() - 200);
   return clampTimeout(Math.min(remaining, fallbackMs), fallbackMs);
-}
-
-function runWithTimeout(promise, timeoutMs) {
-  const safeTimeoutMs = clampTimeout(timeoutMs, DEFAULT_ENGINE_TIMEOUT_MS);
-  let timeoutId;
-  const timeoutPromise = new Promise((resolve) => {
-    timeoutId = setTimeout(() => {
-      resolve({
-        status: 'timeout',
-        timedOut: true,
-        error: new Error(`Timed out after ${safeTimeoutMs}ms.`)
-      });
-    }, safeTimeoutMs);
-  });
-
-  const workPromise = Promise.resolve(promise)
-    .then((value) => {
-      clearTimeout(timeoutId);
-      return {
-        status: 'success',
-        timedOut: false,
-        value
-      };
-    })
-    .catch((error) => {
-      clearTimeout(timeoutId);
-      return {
-        status: 'error',
-        timedOut: false,
-        error
-      };
-    });
-
-  return Promise.race([workPromise, timeoutPromise]);
 }
 
 function computeAccessibilityScore(pages) {
@@ -184,6 +153,48 @@ function createUnavailableAccessibilityData(requestInput, { reason = 'unknown', 
   };
 }
 
+function createPartialAccessibilityData(requestInput, { reason = 'timeout', message = '', durationMs = 0 } = {}) {
+  const sanitizedMessage = sanitizeError(message || 'Accessibility scan partial.');
+  return {
+    status: 'partial',
+    reason,
+    truncated: true,
+    engine: 'accessibility',
+    source: 'axe-core',
+    scanner: {
+      name: 'axe-core',
+      version: axe?.version || null,
+      executionMode: 'playwright-axe'
+    },
+    pageUrl: requestInput.startUrl,
+    analyzedUrl: requestInput.startUrl,
+    mode: requestInput.mode,
+    maxPages: requestInput.maxPages,
+    includeScreenshots: requestInput.includeScreenshots,
+    score: null,
+    issueCount: 0,
+    issues: [],
+    pages: [],
+    performanceIssues: [],
+    screenshots: [],
+    needsReview: [],
+    durationMs,
+    message: sanitizedMessage,
+    metadata: {
+      durationMs,
+      pagesAttempted: 0,
+      pagesScanned: 0,
+      truncated: true,
+      errorsSummary: {
+        totalErrors: 1,
+        totalTimeouts: reason === 'timeout' ? 1 : 0,
+        messages: [sanitizedMessage]
+      }
+    },
+    error: sanitizedMessage
+  };
+}
+
 function mapAccessibilityData(scanResult, requestInput) {
   const payload = scanResult && typeof scanResult === 'object' ? scanResult : {};
   const pages = Array.isArray(payload.pages) ? payload.pages : [];
@@ -198,22 +209,31 @@ function mapAccessibilityData(scanResult, requestInput) {
     ? Math.max(0, Math.floor(rawPagesScanned))
     : pages.filter((page) => page?.status === 'ok').length;
 
-  const status =
-    pagesScanned > 0
-      ? payload.status === 'partial'
-        ? 'partial'
-        : 'available'
-      : 'unavailable';
+  const payloadStatus = String(payload.status || '').toLowerCase();
+  const payloadMessage = String(payload.message || '');
+  const hasTimeoutSignal =
+    payloadMessage.toLowerCase().includes('time') ||
+    Number(metadata?.errorsSummary?.totalTimeouts) > 0;
+  const truncated = Boolean(payload.truncated || metadata.truncated);
 
-  const reason = status === 'unavailable'
-    ? payload.status === 'partial' && String(payload.message || '').toLowerCase().includes('time')
-      ? 'timeout'
-      : 'scan_failed'
-    : null;
+  let status = 'available';
+  if (payloadStatus === 'partial') {
+    status = 'partial';
+  } else if (pagesScanned <= 0) {
+    status = 'unavailable';
+  }
+
+  let reason = null;
+  if (status === 'partial') {
+    reason = hasTimeoutSignal ? 'timeout' : 'partial';
+  } else if (status === 'unavailable') {
+    reason = hasTimeoutSignal ? 'timeout' : 'scan_failed';
+  }
 
   return {
     status,
     reason,
+    truncated,
     engine: 'accessibility',
     source: 'axe-core',
     scanner: {
@@ -246,7 +266,20 @@ function mapAccessibilityData(scanResult, requestInput) {
 }
 
 async function runAccessibilityTask({ requestInput, timeBudget }) {
-  const timeoutMs = remainingTimeout(timeBudget, DEFAULT_ACCESSIBILITY_TIMEOUT_MS);
+  if (requestInput.mode === 'crawl' && timeBudget.remainingMs() < CRAWL_SAFETY_THRESHOLD_MS) {
+    const message = `Accessibility crawl skipped because remaining time is below ${CRAWL_SAFETY_THRESHOLD_MS}ms safety threshold.`;
+    return {
+      status: 'partial',
+      data: createPartialAccessibilityData(requestInput, {
+        reason: 'timeout',
+        message
+      }),
+      error: message,
+      raw: null
+    };
+  }
+
+  const timeoutMs = remainingTimeout(timeBudget, requestInput.accessibilityTimeoutMs);
   const execution = await runWithTimeout(
     runWcagScan({
       startUrl: requestInput.startUrl,
@@ -254,16 +287,18 @@ async function runAccessibilityTask({ requestInput, timeBudget }) {
       maxPages: requestInput.maxPages,
       includeScreenshots: requestInput.includeScreenshots
     }),
-    timeoutMs
+    timeoutMs,
+    'Accessibility scan'
   );
 
   if (execution.status === 'timeout') {
-    const message = `Accessibility scan timed out after ${timeoutMs}ms.`;
+    const message = sanitizeError(execution.message || `Accessibility scan timed out after ${timeoutMs}ms.`);
     return {
-      status: 'failed',
-      data: createUnavailableAccessibilityData(requestInput, {
+      status: 'partial',
+      data: createPartialAccessibilityData(requestInput, {
         reason: 'timeout',
-        message
+        message,
+        durationMs: timeBudget.elapsedMs()
       }),
       error: message,
       raw: null
@@ -284,8 +319,10 @@ async function runAccessibilityTask({ requestInput, timeBudget }) {
   }
 
   const data = mapAccessibilityData(execution.value, requestInput);
+  const status =
+    data.status === 'unavailable' ? 'failed' : data.status === 'partial' ? 'partial' : 'success';
   return {
-    status: data.status === 'unavailable' ? 'failed' : 'success',
+    status,
     data,
     error: data.status === 'unavailable' ? data.error : null,
     raw: execution.value
@@ -384,9 +421,9 @@ function createUnavailableBestPracticesData(startUrl, strategy, reason, message)
 }
 
 async function runDerivedEngineTask({ engineKey, runner, timeoutMs, fallbackBuilder }) {
-  const execution = await runWithTimeout(runner(), timeoutMs);
+  const execution = await runWithTimeout(runner(), timeoutMs, `${engineKey} engine`);
   if (execution.status === 'timeout') {
-    const message = `${engineKey} engine timed out after ${timeoutMs}ms.`;
+    const message = sanitizeError(execution.message || `${engineKey} engine timed out after ${timeoutMs}ms.`);
     return {
       status: 'failed',
       data: fallbackBuilder('timeout', message),
@@ -423,16 +460,20 @@ async function runPsiTask({ startUrl, strategy, timeBudget }) {
       strategy,
       timeoutMs
     }),
-    timeoutMs + 400
+    timeoutMs + 400,
+    'PSI request'
   );
 
   if (execution.status === 'timeout') {
     return {
       status: 'failed',
       error: 'timeout',
-      message: `PSI request timed out after ${timeoutMs}ms.`,
+      message: sanitizeError(execution.message || `PSI request timed out after ${timeoutMs}ms.`),
+      cacheHit: false,
+      fromCache: false,
       psiCallsMade: 0,
       psiCacheHits: 0,
+      fetchDurationMs: 0,
       strategy
     };
   }
@@ -442,8 +483,11 @@ async function runPsiTask({ startUrl, strategy, timeBudget }) {
       status: 'failed',
       error: 'unknown',
       message: sanitizeError(execution.error),
+      cacheHit: false,
+      fromCache: false,
       psiCallsMade: 0,
       psiCacheHits: 0,
+      fetchDurationMs: 0,
       strategy
     };
   }
@@ -454,8 +498,11 @@ async function runPsiTask({ startUrl, strategy, timeBudget }) {
       status: 'failed',
       error: 'unknown',
       message: 'PSI response was empty.',
+      cacheHit: false,
+      fromCache: false,
       psiCallsMade: 0,
       psiCacheHits: 0,
+      fetchDurationMs: 0,
       strategy
     };
   }
@@ -464,25 +511,30 @@ async function runPsiTask({ startUrl, strategy, timeBudget }) {
 
 function buildErrorsSummary(engineErrors, accessibilityData) {
   const messages = [];
+  const seen = new Set();
   let totalTimeouts = 0;
-
-  for (const [engineKey, message] of Object.entries(engineErrors || {})) {
-    const text = sanitizeError(message);
-    messages.push(`${engineKey}: ${text}`);
-    if (text.toLowerCase().includes('timeout')) {
+  const pushMessage = (value) => {
+    const text = sanitizeError(value);
+    if (!text) return;
+    const key = text.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    messages.push(text);
+    if (key.includes('timeout')) {
       totalTimeouts += 1;
     }
+  };
+
+  for (const [engineKey, message] of Object.entries(engineErrors || {})) {
+    pushMessage(`${engineKey}: ${message}`);
+    if (messages.length >= 12) break;
   }
 
   const accessibilityMessages = accessibilityData?.metadata?.errorsSummary?.messages;
-  if (Array.isArray(accessibilityMessages)) {
+  if (Array.isArray(accessibilityMessages) && messages.length < 12) {
     for (const entry of accessibilityMessages) {
       if (!entry) continue;
-      const text = sanitizeError(entry);
-      messages.push(`accessibility: ${text}`);
-      if (text.toLowerCase().includes('timeout')) {
-        totalTimeouts += 1;
-      }
+      pushMessage(`accessibility: ${entry}`);
       if (messages.length >= 12) break;
     }
   }
@@ -591,7 +643,8 @@ exports.handler = async (event, context) => {
     startUrl: normalizedStartUrl,
     mode,
     maxPages: normalizeMaxPages(mode, body.maxPages),
-    includeScreenshots: normalizeIncludeScreenshots(body.includeScreenshots)
+    includeScreenshots: normalizeIncludeScreenshots(body.includeScreenshots),
+    accessibilityTimeoutMs: clampTimeout(body.accessibilityTimeoutMs, DEFAULT_ACCESSIBILITY_TIMEOUT_MS)
   };
 
   const psiStrategy = normalizePsiStrategy(body.psiStrategy);
@@ -720,8 +773,11 @@ exports.handler = async (event, context) => {
             status: 'failed',
             error: 'unknown',
             message: sanitizeError(settled[4].reason),
+            cacheHit: false,
+            fromCache: false,
             psiCallsMade: 0,
             psiCacheHits: 0,
+            fetchDurationMs: 0,
             strategy: psiStrategy
           };
 
@@ -750,10 +806,6 @@ exports.handler = async (event, context) => {
       enginesFailed.push('bestPractices');
       engineErrors.bestPractices =
         bestPractices.reason || bestPractices.error || bestPracticesOutcome.error || 'failed';
-    }
-
-    if (psiResult.status === 'failed' && psiResult.error && !engineErrors.pagespeed) {
-      engineErrors.pagespeed = `${psiResult.error}: ${sanitizeError(psiResult.message || 'PSI request failed.')}`;
     }
 
     const accessibilityScore = clampScore(accessibility.score);
@@ -814,19 +866,18 @@ exports.handler = async (event, context) => {
       },
       metadata: {
         durationMs,
-        truncated: Boolean(accessibilityMeta.truncated || timeBudget.remainingMs() <= 0),
+        truncated: Boolean(
+          status === 'partial' ||
+          accessibility.truncated ||
+          accessibilityMeta.truncated ||
+          timeBudget.remainingMs() <= 0
+        ),
         enginesRun,
         enginesFailed,
         psiCallsMade: Number(psiResult.psiCallsMade) || 0,
         psiCacheHits: Number(psiResult.psiCacheHits) || 0,
         engineErrors,
         errorsSummary,
-        pagespeed: {
-          status: psiResult.status,
-          strategy: psiResult.strategy || psiStrategy,
-          fromCache: Boolean(psiResult.fromCache),
-          fetchDurationMs: Number(psiResult.fetchDurationMs) || 0
-        },
         pagesAttempted: Number(accessibilityMeta.pagesAttempted) || pages.length,
         pagesScanned: Number(accessibilityMeta.pagesScanned) || pages.filter((page) => page?.status === 'ok').length,
         standards: accessibilityMeta.standards || {
