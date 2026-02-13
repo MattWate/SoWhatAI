@@ -6,15 +6,17 @@ import { runSeoEngine } from './seoEngine.js';
 import { runBestPracticesEngine } from './bestPracticesEngine.js';
 import { runWithTimeout } from './runWithTimeout.js';
 
-const TOTAL_SCAN_BUDGET_MS = 20000;
-const DEFAULT_ACCESSIBILITY_TIMEOUT_MS = 15000;
+const TOTAL_SCAN_BUDGET_SINGLE_MS = 30000;
+const TOTAL_SCAN_BUDGET_CRAWL_MS = 45000;
+const DEFAULT_ACCESSIBILITY_TIMEOUT_SINGLE_MS = 30000;
+const DEFAULT_ACCESSIBILITY_TIMEOUT_CRAWL_MS = 15000;
 const DEFAULT_PSI_TIMEOUT_MS = 10000;
 const DEFAULT_ENGINE_TIMEOUT_MS = 9000;
 const DEFAULT_PSI_STRATEGY = 'mobile';
 const DEFAULT_CRAWL_MAX_PAGES = 3;
 const CRAWL_SAFETY_THRESHOLD_MS = 3500;
 const MIN_TIMEOUT_MS = 2500;
-const MAX_TIMEOUT_MS = 20000;
+const MAX_TIMEOUT_MS = 60000;
 const MAX_ERROR_LENGTH = 260;
 
 function json(statusCode, body) {
@@ -50,6 +52,16 @@ function normalizeMode(mode) {
   return String(mode || '').toLowerCase() === 'crawl' ? 'crawl' : 'single';
 }
 
+function getTotalScanBudgetForMode(mode) {
+  return mode === 'crawl' ? TOTAL_SCAN_BUDGET_CRAWL_MS : TOTAL_SCAN_BUDGET_SINGLE_MS;
+}
+
+function getAccessibilityTimeoutForMode(mode) {
+  return mode === 'crawl'
+    ? DEFAULT_ACCESSIBILITY_TIMEOUT_CRAWL_MS
+    : DEFAULT_ACCESSIBILITY_TIMEOUT_SINGLE_MS;
+}
+
 function normalizeMaxPages(mode, maxPages) {
   if (mode !== 'crawl') return 1;
   const numeric = Number(maxPages);
@@ -76,8 +88,8 @@ function normalizeHttpUrl(rawUrl) {
   }
 }
 
-function createTimeBudget(totalMs) {
-  const budgetMs = clampTimeout(totalMs, TOTAL_SCAN_BUDGET_MS);
+function createTimeBudget(totalMs, fallbackMs) {
+  const budgetMs = clampTimeout(totalMs, fallbackMs);
   const startedAtMs = Date.now();
   const deadlineAtMs = startedAtMs + budgetMs;
   return {
@@ -279,13 +291,19 @@ async function runAccessibilityTask({ requestInput, timeBudget }) {
     };
   }
 
-  const timeoutMs = remainingTimeout(timeBudget, requestInput.accessibilityTimeoutMs);
+  const scanTimeoutFallback =
+    requestInput.mode === 'crawl'
+      ? requestInput.totalBudgetMs
+      : requestInput.accessibilityTimeoutMs;
+  const timeoutMs = remainingTimeout(timeBudget, scanTimeoutFallback);
   const execution = await runWithTimeout(
     runWcagScan({
       startUrl: requestInput.startUrl,
       mode: requestInput.mode,
       maxPages: requestInput.maxPages,
-      includeScreenshots: requestInput.includeScreenshots
+      includeScreenshots: requestInput.includeScreenshots,
+      timeoutMs: requestInput.totalBudgetMs,
+      pageScanBudgetMs: requestInput.mode === 'crawl' ? requestInput.accessibilityTimeoutMs : undefined
     }),
     timeoutMs,
     'Accessibility scan'
@@ -602,7 +620,7 @@ function buildFailureResponse(requestInput, durationMs, errorMessage) {
         ]
       },
       request: requestInput,
-      totalBudgetMs: TOTAL_SCAN_BUDGET_MS
+      totalBudgetMs: requestInput.totalBudgetMs || getTotalScanBudgetForMode(requestInput.mode)
     },
     pages: [],
     issues: [],
@@ -644,11 +662,12 @@ exports.handler = async (event, context) => {
     mode,
     maxPages: normalizeMaxPages(mode, body.maxPages),
     includeScreenshots: normalizeIncludeScreenshots(body.includeScreenshots),
-    accessibilityTimeoutMs: clampTimeout(body.accessibilityTimeoutMs, DEFAULT_ACCESSIBILITY_TIMEOUT_MS)
+    totalBudgetMs: clampTimeout(body.totalBudgetMs, getTotalScanBudgetForMode(mode)),
+    accessibilityTimeoutMs: clampTimeout(body.accessibilityTimeoutMs, getAccessibilityTimeoutForMode(mode))
   };
 
   const psiStrategy = normalizePsiStrategy(body.psiStrategy);
-  const timeBudget = createTimeBudget(TOTAL_SCAN_BUDGET_MS);
+  const timeBudget = createTimeBudget(requestInput.totalBudgetMs, getTotalScanBudgetForMode(mode));
 
   try {
     const accessibilityPromise = runAccessibilityTask({ requestInput, timeBudget });
@@ -790,9 +809,14 @@ exports.handler = async (event, context) => {
     const enginesFailed = [];
     const engineErrors = {};
 
-    if (accessibility.status === 'unavailable') {
+    if (accessibility.status === 'unavailable' || accessibility.status === 'partial') {
       enginesFailed.push('accessibility');
-      engineErrors.accessibility = accessibilityOutcome.error || accessibility.error || accessibility.reason || 'failed';
+      engineErrors.accessibility =
+        accessibilityOutcome.error ||
+        accessibility.error ||
+        accessibility.message ||
+        accessibility.reason ||
+        'failed';
     }
     if (performance.status === 'unavailable') {
       enginesFailed.push('performance');
@@ -895,7 +919,7 @@ exports.handler = async (event, context) => {
             ? performance.summary
             : accessibilityMeta.performance || null,
         request: requestInput,
-        totalBudgetMs: TOTAL_SCAN_BUDGET_MS
+        totalBudgetMs: requestInput.totalBudgetMs
       },
       pages,
       issues,

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { runWcagScan } from './api.js';
+import { getStorageItem, setStorageItem } from '../../utils/safeStorage.js';
 
 const IMPACT_ORDER = ['critical', 'serious', 'moderate', 'minor'];
 const ISSUE_STATUSES = ['open', 'in_progress', 'resolved', 'accepted_risk'];
@@ -28,9 +29,8 @@ function formatDuration(ms) {
 }
 
 function loadJsonStorage(key, fallback) {
-  if (typeof window === 'undefined') return fallback;
   try {
-    const raw = window.localStorage.getItem(key);
+    const raw = getStorageItem(key);
     if (!raw) return fallback;
     const parsed = JSON.parse(raw);
     return parsed ?? fallback;
@@ -251,13 +251,11 @@ export default function WcagScanPanel() {
   const [issueStatusMap, setIssueStatusMap] = useState(() => loadJsonStorage(ISSUE_STATUS_STORAGE_KEY, {}));
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(RUN_HISTORY_STORAGE_KEY, JSON.stringify(runHistory.slice(0, 20)));
+    setStorageItem(RUN_HISTORY_STORAGE_KEY, JSON.stringify(runHistory.slice(0, 20)));
   }, [runHistory]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(ISSUE_STATUS_STORAGE_KEY, JSON.stringify(issueStatusMap));
+    setStorageItem(ISSUE_STATUS_STORAGE_KEY, JSON.stringify(issueStatusMap));
   }, [issueStatusMap]);
 
   const urlError = useMemo(() => {
