@@ -6,75 +6,106 @@ function sanitizeErrorMessage(value, fallback = 'WCAG scan failed.') {
 
 function delay(ms, signal) {
   return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(resolve, ms);
+    const timeoutId = setTimeout(() => {
+      if (signal && onAbort) {
+        signal.removeEventListener('abort', onAbort);
+      }
+      resolve();
+    }, ms);
+
+    let onAbort = null;
     if (!signal) return;
     if (signal.aborted) {
       clearTimeout(timeoutId);
       reject(new DOMException('The operation was aborted.', 'AbortError'));
       return;
     }
-    const onAbort = () => {
+    onAbort = () => {
       clearTimeout(timeoutId);
       signal.removeEventListener('abort', onAbort);
       reject(new DOMException('The operation was aborted.', 'AbortError'));
     };
     signal.addEventListener('abort', onAbort, { once: true });
-    setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-    }, ms + 20);
   });
 }
 
-export async function startWcagScan(payload, { signal } = {}) {
-  const response = await fetch('/.netlify/functions/start-wcag-scan', {
+async function parseJsonSafe(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function capturePage(payload, { signal } = {}) {
+  const response = await fetch('/.netlify/functions/capture-page', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
     signal
   });
 
-  let data = null;
-  try {
-    data = await response.json();
-  } catch {
-    data = null;
-  }
+  const data = await parseJsonSafe(response);
 
   if (!response.ok) {
-    const message = data?.error || `Failed to start WCAG scan (${response.status})`;
+    const message = data?.error || `Capture request failed (${response.status})`;
     throw new Error(sanitizeErrorMessage(message));
   }
 
-  if (!data?.jobId) {
-    throw new Error('Failed to start WCAG scan job.');
+  if (String(data?.status || '').toLowerCase() === 'failed') {
+    throw new Error(
+      sanitizeErrorMessage(
+        data?.error?.message || data?.message || 'Unable to capture page snapshot.'
+      )
+    );
+  }
+
+  if (!data?.snapshotId) {
+    throw new Error('Capture did not return snapshotId.');
   }
 
   return data;
 }
 
-export async function getWcagScanStatus(jobId, { signal } = {}) {
-  const response = await fetch(
-    `/.netlify/functions/wcag-scan-status?jobId=${encodeURIComponent(jobId)}`,
-    {
-      method: 'GET',
-      signal
-    }
-  );
+export async function triggerSnapshotAnalysis(snapshotId, options = {}, { signal } = {}) {
+  const response = await fetch('/.netlify/functions/analyze-snapshot', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ snapshotId, options }),
+    signal
+  });
 
-  let data = null;
-  try {
-    data = await response.json();
-  } catch {
-    data = null;
+  const data = await parseJsonSafe(response);
+  if (!response.ok) {
+    const message = data?.error || `Analyze request failed (${response.status})`;
+    throw new Error(sanitizeErrorMessage(message));
   }
 
+  if (String(data?.status || '').toLowerCase() === 'failed') {
+    throw new Error(
+      sanitizeErrorMessage(
+        data?.error?.message || data?.message || 'Unable to queue snapshot analysis.'
+      )
+    );
+  }
+
+  return data;
+}
+
+export async function getSnapshotStatus(snapshotId, { signal } = {}) {
+  const response = await fetch(
+    `/.netlify/functions/snapshot-status?snapshotId=${encodeURIComponent(snapshotId)}`,
+    { method: 'GET', signal }
+  );
+  const data = await parseJsonSafe(response);
+
   if (!response.ok) {
-    const message = data?.error || `Failed to read WCAG scan status (${response.status})`;
+    const message = data?.error || `Snapshot status failed (${response.status})`;
     throw new Error(sanitizeErrorMessage(message));
   }
 
   if (!data || typeof data !== 'object') {
-    throw new Error('Invalid status payload from wcag-scan-status.');
+    throw new Error('Invalid snapshot-status payload.');
   }
 
   return data;
@@ -88,28 +119,32 @@ export async function runWcagScan(
     onProgress
   } = {}
 ) {
-  const started = await startWcagScan(payload, { signal });
-  const jobId = started.jobId;
+  const capturePayload = {
+    url: payload?.startUrl || payload?.url || '',
+    timeoutMs: payload?.timeoutMs,
+    options: {
+      includeBestPracticeHints: payload?.includeBestPracticeHints !== false
+    }
+  };
+  const started = await capturePage(capturePayload, { signal });
+  const snapshotId = started.snapshotId;
   const interval = Math.max(750, Math.floor(Number(pollIntervalMs) || DEFAULT_POLL_INTERVAL_MS));
+  let enqueueRetryAttempted = false;
 
   if (typeof onProgress === 'function') {
     onProgress({
-      jobId,
-      status: started.status || 'queued',
+      jobId: snapshotId,
+      snapshotId,
+      status: started.status || 'captured',
       progress: {
-        percent: 0,
-        message: 'Queued for processing.'
+        percent: 12,
+        message: 'Snapshot captured.'
       }
     });
   }
 
-  if (String(started.status || '').toLowerCase() === 'failed') {
-    throw new Error(
-      sanitizeErrorMessage(
-        started?.error?.message || 'WCAG scan job failed to start.'
-      )
-    );
-  }
+  // Ensure analysis is queued even if capture endpoint auto-dispatch was delayed.
+  await triggerSnapshotAnalysis(snapshotId, capturePayload.options, { signal }).catch(() => {});
 
   while (true) {
     if (signal?.aborted) {
@@ -117,25 +152,34 @@ export async function runWcagScan(
     }
 
     await delay(interval, signal);
-    const statusPayload = await getWcagScanStatus(jobId, { signal });
-    const status = String(statusPayload?.status || 'queued').toLowerCase();
+    const statusPayload = await getSnapshotStatus(snapshotId, { signal });
+    const status = String(statusPayload?.status || 'captured').toLowerCase();
 
     if (typeof onProgress === 'function') {
-      onProgress(statusPayload);
+      onProgress({
+        ...statusPayload,
+        jobId: snapshotId
+      });
     }
 
     if (status === 'complete') {
       if (!statusPayload.result) {
-        throw new Error('Scan completed but no result payload was returned.');
+        throw new Error('Snapshot analysis completed but no result payload was returned.');
       }
       return statusPayload.result;
     }
 
     if (status === 'failed') {
       const message = sanitizeErrorMessage(
-        statusPayload?.error?.message || statusPayload?.progress?.message || 'WCAG scan job failed.'
+        statusPayload?.error?.message || statusPayload?.progress?.message || 'Snapshot analysis failed.'
       );
       throw new Error(message);
+    }
+
+    if (status === 'captured' && !enqueueRetryAttempted) {
+      enqueueRetryAttempted = true;
+      // Defensive: if capture completed but background queueing was delayed, retry enqueue once.
+      await triggerSnapshotAnalysis(snapshotId, capturePayload.options, { signal }).catch(() => {});
     }
   }
 }

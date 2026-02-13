@@ -16,6 +16,7 @@
     "mammoth": "^1.9.1",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.1",
+    "jsdom": "^26.1.0",
     "papaparse": "^5.5.3",
     "playwright-core": "^1.51.1",
     "pptxgenjs": "^3.12.0", 
