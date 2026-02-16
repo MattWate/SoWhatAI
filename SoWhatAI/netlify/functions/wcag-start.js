@@ -63,6 +63,30 @@ function buildJobId() {
   return `wcag_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function resolveJobStoreExports(moduleRef) {
+  if (!moduleRef || typeof moduleRef !== 'object') return {};
+  const fromDefault = moduleRef.default && typeof moduleRef.default === 'object' ? moduleRef.default : {};
+  return { ...fromDefault, ...moduleRef };
+}
+
+async function loadJobStoreApi() {
+  let moduleRef = null;
+  try {
+    moduleRef = require('./jobStore.js');
+  } catch {}
+  if (!moduleRef) {
+    moduleRef = await import('./jobStore.js');
+  }
+
+  const store = resolveJobStoreExports(moduleRef);
+  const createJob = typeof store.createJob === 'function' ? store.createJob : null;
+  const failJob = typeof store.failJob === 'function' ? store.failJob : async () => null;
+  if (!createJob) {
+    throw new Error('createJob export not found.');
+  }
+  return { createJob, failJob };
+}
+
 async function handler(event, context) {
   if (context && typeof context === 'object') {
     context.callbackWaitsForEmptyEventLoop = false;
@@ -103,9 +127,9 @@ async function handler(event, context) {
   let createJob = null;
   let failJob = async () => null;
   try {
-    const store = require('./jobStore.js');
-    createJob = store && typeof store.createJob === 'function' ? store.createJob : null;
-    failJob = store && typeof store.failJob === 'function' ? store.failJob : failJob;
+    const api = await loadJobStoreApi();
+    createJob = api.createJob;
+    failJob = api.failJob;
   } catch (error) {
     return json(200, {
       jobId,
