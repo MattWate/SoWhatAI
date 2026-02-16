@@ -101,11 +101,11 @@ async function handler(event, context) {
   const pollUrl = `/.netlify/functions/wcag-status?jobId=${encodeURIComponent(jobId)}`;
 
   let createJob = null;
-  let failJob = null;
+  let failJob = async () => null;
   try {
     const store = require('./jobStore.js');
     createJob = store && typeof store.createJob === 'function' ? store.createJob : null;
-    failJob = store && typeof store.failJob === 'function' ? store.failJob : null;
+    failJob = store && typeof store.failJob === 'function' ? store.failJob : failJob;
   } catch (error) {
     return json(200, {
       jobId,
@@ -118,7 +118,7 @@ async function handler(event, context) {
     });
   }
 
-  if (typeof createJob !== 'function' || typeof failJob !== 'function') {
+  if (typeof createJob !== 'function') {
     return json(200, {
       jobId,
       status: 'failed',
