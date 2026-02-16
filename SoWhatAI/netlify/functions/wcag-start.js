@@ -1,5 +1,4 @@
 const crypto = require('crypto');
-const { createJob, failJob } = require('./jobStore.js');
 const fetch = global.fetch;
 
 const DEFAULT_SINGLE_TIMEOUT_MS = 60000;
@@ -101,6 +100,36 @@ async function handler(event, context) {
   const now = new Date().toISOString();
   const pollUrl = `/.netlify/functions/wcag-status?jobId=${encodeURIComponent(jobId)}`;
 
+  let createJob = null;
+  let failJob = null;
+  try {
+    const store = require('./jobStore.js');
+    createJob = store && typeof store.createJob === 'function' ? store.createJob : null;
+    failJob = store && typeof store.failJob === 'function' ? store.failJob : null;
+  } catch (error) {
+    return json(200, {
+      jobId,
+      status: 'failed',
+      pollUrl,
+      error: {
+        code: 'job_store_unavailable',
+        message: sanitizeText(error?.message || String(error), 'Job store unavailable.')
+      }
+    });
+  }
+
+  if (typeof createJob !== 'function' || typeof failJob !== 'function') {
+    return json(200, {
+      jobId,
+      status: 'failed',
+      pollUrl,
+      error: {
+        code: 'job_store_unavailable',
+        message: 'Job store unavailable.'
+      }
+    });
+  }
+
   try {
     await createJob({
       jobId,
@@ -141,3 +170,4 @@ async function handler(event, context) {
 
 exports.handler = handler;
 module.exports.handler = handler;
+module.exports = { handler };
