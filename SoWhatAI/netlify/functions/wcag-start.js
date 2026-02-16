@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const fetch = global.fetch;
+const fetchFn = typeof globalThis !== 'undefined' ? globalThis.fetch : null;
 
 const DEFAULT_SINGLE_TIMEOUT_MS = 60000;
 const DEFAULT_CRAWL_TIMEOUT_MS = 90000;
@@ -166,11 +166,13 @@ async function handler(event, context) {
       }
     });
 
-    fetch('/.netlify/functions/wcag-run-background', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId })
-    }).catch(() => {});
+    if (typeof fetchFn === 'function') {
+      fetchFn('/.netlify/functions/wcag-run-background', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId })
+      }).catch(() => {});
+    }
 
     return json(202, {
       jobId,
