@@ -393,18 +393,12 @@ async function maybeFetchPsiSummary(payload, event, jobId) {
 }
 
 function startProgressHeartbeat(jobId) {
-  let percent = 32;
-  let tick = 0;
+  let percent = 44;
   const timer = setInterval(() => {
-    tick += 1;
-    percent = Math.min(82, percent + 4);
-    const message =
-      tick === 1
-        ? 'Page fetch stage complete. Running axe-core checks...'
-        : 'Running axe-core checks on discovered pages...';
+    percent = Math.min(76, percent + 4);
     updateJob(jobId, {
       status: 'running',
-      progress: normalizeProgress(percent, message)
+      progress: normalizeProgress(percent, 'Running axe')
     }).catch(() => {});
   }, HEARTBEAT_INTERVAL_MS);
 
@@ -435,12 +429,12 @@ async function runScanJob(jobId, payload, event) {
 
   await updateJob(jobId, {
     status: 'running',
-    progress: normalizeProgress(10, 'Launching browser context...')
+    progress: normalizeProgress(10, 'Fetching page')
   });
 
   await updateJob(jobId, {
     status: 'running',
-    progress: normalizeProgress(26, 'Preparing page crawl and accessibility engine...')
+    progress: normalizeProgress(40, 'Running axe')
   });
 
   const stopHeartbeat = startProgressHeartbeat(jobId);
@@ -459,7 +453,7 @@ async function runScanJob(jobId, payload, event) {
 
   await updateJob(jobId, {
     status: 'running',
-    progress: normalizeProgress(86, 'Axe analysis complete. Aggregating accessibility findings...')
+    progress: normalizeProgress(80, 'Formatting report')
   });
 
   const accessibility = toAccessibilityEnvelope(rawScanResult, scanPayload);

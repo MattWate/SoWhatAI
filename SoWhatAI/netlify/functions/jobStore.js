@@ -260,13 +260,35 @@ function mergeJob(existing, patch) {
   return merged;
 }
 
-async function createJob(jobId, payload) {
-  const normalizedId = String(jobId || '').trim();
-  if (!normalizedId) {
-    throw new Error('jobId is required.');
+async function createJob(jobOrId, payload) {
+  let normalizedId = '';
+  let seedRecord = null;
+
+  if (jobOrId && typeof jobOrId === 'object' && !Array.isArray(jobOrId)) {
+    normalizedId = String(jobOrId.jobId || '').trim();
+    if (!normalizedId) {
+      throw new Error('jobId is required.');
+    }
+    seedRecord = withDefaults(normalizedId, {
+      status: jobOrId.status,
+      progress: jobOrId.progress,
+      payload: Object.prototype.hasOwnProperty.call(jobOrId, 'payload') ? jobOrId.payload : payload,
+      result: Object.prototype.hasOwnProperty.call(jobOrId, 'result') ? jobOrId.result : null,
+      error: Object.prototype.hasOwnProperty.call(jobOrId, 'error') ? jobOrId.error : null,
+      createdAt: jobOrId.createdAt,
+      updatedAt: jobOrId.updatedAt,
+      completedAt: jobOrId.completedAt,
+      expiresAt: jobOrId.expiresAt
+    });
+  } else {
+    normalizedId = String(jobOrId || '').trim();
+    if (!normalizedId) {
+      throw new Error('jobId is required.');
+    }
+    seedRecord = buildBaseJob(normalizedId, payload);
   }
-  const base = buildBaseJob(normalizedId, payload);
-  const saved = await writeRecord(normalizedId, base);
+
+  const saved = await writeRecord(normalizedId, seedRecord);
   return stripPayload(saved);
 }
 
@@ -298,7 +320,7 @@ async function completeJob(jobId, result) {
   const completedAt = nowIso();
   const updated = await updateJob(normalizedId, {
     status: 'complete',
-    progress: { percent: 100, message: 'Scan completed.' },
+    progress: { percent: 100, message: 'Complete' },
     result,
     error: null,
     completedAt
