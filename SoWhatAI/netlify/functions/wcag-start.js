@@ -166,8 +166,4 @@ async function handler(event, context) {
       }
     });
   }
-}
-
-exports.handler = handler;
-module.exports.handler = handler;
-module.exports = { handler };
+};
