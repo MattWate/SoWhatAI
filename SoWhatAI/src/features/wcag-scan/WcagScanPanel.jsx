@@ -496,7 +496,7 @@ export default function WcagScanPanel() {
           <div className="space-y-2 rounded border border-teal-800 bg-teal-950/20 p-3">
             <div className="flex items-center justify-between gap-3 text-xs text-teal-200">
               <span>{scanProgress.message || 'Running scan job...'}</span>
-              <span>{Math.max(0, Math.min(100, Math.round(Number(scanProgress.percent) || 0))}%</span>
+              <span>{Math.max(0, Math.min(100, Math.round(Number(scanProgress.percent) || 0)))}%</span>
             </div>
             <div className="h-2 w-full rounded bg-gray-800 overflow-hidden">
               <div
