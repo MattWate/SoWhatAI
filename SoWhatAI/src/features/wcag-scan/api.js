@@ -4,8 +4,24 @@ function sanitizeErrorMessage(value, fallback = 'WCAG scan failed.') {
   return String(value || fallback).replace(/\s+/g, ' ').trim();
 }
 
+function parseJsonSafe(response) {
+  return response
+    .json()
+    .then((value) => value)
+    .catch(() => null);
+}
+
+function toAbortError() {
+  return new DOMException('The operation was aborted.', 'AbortError');
+}
+
 function delay(ms, signal) {
   return new Promise((resolve, reject) => {
+    if (signal && signal.aborted) {
+      reject(toAbortError());
+      return;
+    }
+
     const timeoutId = setTimeout(() => {
       if (signal && onAbort) {
         signal.removeEventListener('abort', onAbort);
@@ -15,130 +31,131 @@ function delay(ms, signal) {
 
     let onAbort = null;
     if (!signal) return;
-    if (signal.aborted) {
-      clearTimeout(timeoutId);
-      reject(new DOMException('The operation was aborted.', 'AbortError'));
-      return;
-    }
+
     onAbort = () => {
       clearTimeout(timeoutId);
       signal.removeEventListener('abort', onAbort);
-      reject(new DOMException('The operation was aborted.', 'AbortError'));
+      reject(toAbortError());
     };
     signal.addEventListener('abort', onAbort, { once: true });
   });
 }
 
-async function parseJsonSafe(response) {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
+function extractErrorMessage(payload, fallback) {
+  return sanitizeErrorMessage(
+    payload?.error?.message ||
+      payload?.error ||
+      payload?.message ||
+      fallback
+  );
 }
 
 export async function startWcagScan(payload, { signal } = {}) {
   const response = await fetch('/.netlify/functions/wcag-start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(payload || {}),
     signal
   });
 
   const data = await parseJsonSafe(response);
   if (!response.ok) {
-    const message = data?.error?.message || data?.error || data?.message || `WCAG start failed (${response.status})`;
-    throw new Error(sanitizeErrorMessage(message));
+    throw new Error(extractErrorMessage(data, `Failed to start WCAG scan (${response.status}).`));
   }
   if (!data || typeof data !== 'object') {
-    throw new Error('Invalid wcag-start payload.');
-  }
-  if (String(data.status || '').toLowerCase() === 'failed') {
-    const message = data?.error?.message || data?.message || 'Unable to queue WCAG scan.';
-    throw new Error(sanitizeErrorMessage(message));
+    throw new Error('Invalid wcag-start response payload.');
   }
   if (!data.jobId) {
-    throw new Error('wcag-start did not return jobId.');
+    throw new Error('wcag-start did not return a jobId.');
   }
-  return data;
+
+  return {
+    jobId: String(data.jobId),
+    status: String(data.status || 'queued').toLowerCase(),
+    pollUrl: String(data.pollUrl || `/.netlify/functions/wcag-status?jobId=${encodeURIComponent(data.jobId)}`)
+  };
 }
 
 export async function getWcagStatus(jobId, { signal } = {}) {
-  const response = await fetch(`/.netlify/functions/wcag-status?jobId=${encodeURIComponent(jobId)}`, {
+  const safeJobId = String(jobId || '').trim();
+  if (!safeJobId) {
+    throw new Error('jobId is required.');
+  }
+
+  const response = await fetch(`/.netlify/functions/wcag-status?jobId=${encodeURIComponent(safeJobId)}`, {
     method: 'GET',
     signal
   });
+
   const data = await parseJsonSafe(response);
   if (!response.ok) {
-    const message = data?.error?.message || data?.error || data?.message || `WCAG status failed (${response.status})`;
-    throw new Error(sanitizeErrorMessage(message));
+    throw new Error(extractErrorMessage(data, `Failed to fetch WCAG status (${response.status}).`));
   }
   if (!data || typeof data !== 'object') {
-    throw new Error('Invalid wcag-status payload.');
+    throw new Error('Invalid wcag-status response payload.');
   }
-  return data;
+
+  return {
+    jobId: String(data.jobId || safeJobId),
+    status: String(data.status || 'queued').toLowerCase(),
+    progress: data.progress && typeof data.progress === 'object'
+      ? {
+          percent: Number.isFinite(Number(data.progress.percent))
+            ? Number(data.progress.percent)
+            : 0,
+          message: String(data.progress.message || '')
+        }
+      : { percent: 0, message: '' },
+    result: data.result ?? null,
+    error: data.error ?? null
+  };
 }
 
 export async function runWcagScan(
   payload,
   {
-    signal,
+    onProgress,
     pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
-    onProgress
+    signal
   } = {}
 ) {
-  const requestPayload = {
-    startUrl: payload?.startUrl || payload?.url || '',
-    mode: payload?.mode,
-    maxPages: payload?.maxPages,
-    includeScreenshots: payload?.includeScreenshots,
-    timeoutMs: payload?.timeoutMs,
-    runPsi: payload?.runPsi,
-    psiStrategy: payload?.psiStrategy,
-    includePerformanceAudit: payload?.includePerformanceAudit
-  };
-
-  const started = await startWcagScan(requestPayload, { signal });
-  const jobId = String(started.jobId);
-  const interval = Math.max(750, Math.floor(Number(pollIntervalMs) || DEFAULT_POLL_INTERVAL_MS));
+  const intervalMs = Math.max(500, Math.floor(Number(pollIntervalMs) || DEFAULT_POLL_INTERVAL_MS));
+  const started = await startWcagScan(payload, { signal });
 
   if (typeof onProgress === 'function') {
     onProgress({
-      jobId,
-      status: String(started.status || 'queued').toLowerCase(),
+      jobId: started.jobId,
+      status: started.status,
       progress: {
         percent: 0,
         message: 'Queued'
-      }
+      },
+      result: null,
+      error: null
     });
   }
 
   while (true) {
-    if (signal?.aborted) {
-      throw new DOMException('The operation was aborted.', 'AbortError');
+    if (signal && signal.aborted) {
+      throw toAbortError();
     }
 
-    await delay(interval, signal);
-    const statusPayload = await getWcagStatus(jobId, { signal });
-    const status = String(statusPayload?.status || 'queued').toLowerCase();
+    await delay(intervalMs, signal);
+    const statusPayload = await getWcagStatus(started.jobId, { signal });
+    const status = String(statusPayload.status || 'queued').toLowerCase();
 
     if (typeof onProgress === 'function') {
-      onProgress({
-        ...statusPayload,
-        jobId
-      });
+      onProgress(statusPayload);
     }
 
     if (status === 'complete') {
-      if (!statusPayload.result) {
-        throw new Error('WCAG scan completed but no result payload was returned.');
-      }
-      return statusPayload.result;
+      return statusPayload.result || {};
     }
 
     if (status === 'failed') {
-      const message = sanitizeErrorMessage(
-        statusPayload?.error?.message || statusPayload?.progress?.message || 'WCAG scan failed.'
+      const message = extractErrorMessage(
+        statusPayload,
+        statusPayload?.progress?.message || 'WCAG scan failed.'
       );
       throw new Error(message);
     }
