@@ -1,7 +1,10 @@
 # This file is in the repository root
 [build]
-  command = "cd SoWhatAI && npm install && npm run build"
+  command = "cd SoWhatAI && npm install --legacy-peer-deps --no-audit --no-fund && npm run build"
   publish = "SoWhatAI/dist"
+
+[build.environment]
+  NODE_VERSION = "20"
 
 [functions]
   directory = "SoWhatAI/netlify/functions"
