@@ -1,8 +1,7 @@
-const { createJob, failJob, JOB_TTL_MS } = require('./jobStore.js');
-
 const BACKGROUND_PATH = '/.netlify/functions/wcag-run-background';
 const MIN_TIMEOUT_MS = 10000;
 const MAX_TIMEOUT_MS = 25000;
+const JOB_TTL_MS = 30 * 60 * 1000;
 
 function json(statusCode, body) {
   return {
@@ -93,7 +92,7 @@ function normalizePayload(input) {
   };
 }
 
-function triggerBackground(jobId, event) {
+function triggerBackground(jobId, event, onFailure) {
   const fetchImpl = global.fetch;
   if (typeof fetchImpl !== 'function') return;
 
@@ -108,23 +107,34 @@ function triggerBackground(jobId, event) {
       })
     ).catch((error) => {
       console.warn('[wcag-start] background trigger failed', sanitizeText(error && error.message, 'Unknown error.'));
-      failJob(jobId, {
-        code: 'background_trigger_failed',
-        message: 'Background scan trigger failed.'
-      }).catch(() => {});
+      if (typeof onFailure === 'function') {
+        onFailure().catch(() => {});
+      }
     });
   } catch (error) {
     console.warn('[wcag-start] background trigger failed', sanitizeText(error && error.message, 'Unknown error.'));
-    failJob(jobId, {
-      code: 'background_trigger_failed',
-      message: 'Background scan trigger failed.'
-    }).catch(() => {});
+    if (typeof onFailure === 'function') {
+      onFailure().catch(() => {});
+    }
   }
 }
 
-exports.handler = async (event, context) => {
+async function handler(event, context) {
   if (context && typeof context === 'object') {
     context.callbackWaitsForEmptyEventLoop = false;
+  }
+
+  let createJob = null;
+  let failJob = null;
+  try {
+    const storeModule = require('./jobStore.js');
+    createJob = storeModule.createJob;
+    failJob = storeModule.failJob;
+  } catch (error) {
+    return json(500, {
+      error: 'job_store_unavailable',
+      message: sanitizeText(error && error.message, 'Unable to load job store.')
+    });
   }
 
   if (event.httpMethod !== 'POST') {
@@ -165,11 +175,21 @@ exports.handler = async (event, context) => {
     });
   }
 
-  triggerBackground(jobId, event);
+  triggerBackground(jobId, event, async () => {
+    if (typeof failJob === 'function') {
+      await failJob(jobId, {
+        code: 'background_trigger_failed',
+        message: 'Background scan trigger failed.'
+      });
+    }
+  });
 
   return json(202, {
     jobId,
     status: 'queued',
     pollUrl
   });
-};
+}
+
+exports.handler = handler;
+module.exports.handler = handler;
