@@ -119,7 +119,13 @@ async function getBlobStore() {
 
   blobStorePromise = (async () => {
     try {
-      const module = await import('@netlify/blobs');
+      let module = null;
+      try {
+        module = require('@netlify/blobs');
+      } catch {}
+      if (!module) {
+        module = await import('@netlify/blobs');
+      }
       const getStore =
         (module && typeof module.getStore === 'function' && module.getStore) ||
         (module && module.default && typeof module.default.getStore === 'function' && module.default.getStore);
