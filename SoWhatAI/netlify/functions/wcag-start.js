@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { createJob, failJob } = require('./jobStore.js');
+const fetch = global.fetch;
 
 const DEFAULT_SINGLE_TIMEOUT_MS = 60000;
 const DEFAULT_CRAWL_TIMEOUT_MS = 90000;
@@ -63,31 +64,6 @@ function buildJobId() {
   return `wcag_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function startBackgroundJob(jobId) {
-  try {
-    const { handler: runBackgroundHandler } = require('./wcag-run-background.js');
-    runBackgroundHandler(
-      {
-        httpMethod: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId })
-      },
-      { callbackWaitsForEmptyEventLoop: false }
-    ).catch((error) => {
-      failJob(jobId, {
-        code: 'background_dispatch_failed',
-        message: sanitizeText(error?.message || String(error), 'Background execution failed to start.')
-      }).catch(() => {});
-    });
-    return;
-  } catch (error) {
-    failJob(jobId, {
-      code: 'background_dispatch_failed',
-      message: sanitizeText(error?.message || String(error), 'Background execution failed to start.')
-    }).catch(() => {});
-  }
-}
-
 exports.handler = async (event, context) => {
   if (context && typeof context === 'object') {
     context.callbackWaitsForEmptyEventLoop = false;
@@ -137,7 +113,11 @@ exports.handler = async (event, context) => {
       }
     });
 
-    startBackgroundJob(jobId);
+    fetch('/.netlify/functions/wcag-run-background', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId })
+    }).catch(() => {});
 
     return json(202, {
       jobId,
