@@ -128,17 +128,20 @@ async function getBlobStore() {
       }
       return getStore(JOB_STORE_NAME);
     } catch (error) {
-      if (process.env.NETLIFY) {
-        throw new Error(
-          `Netlify Blobs is required in production jobStore. ${sanitizeText(error && error.message)}`
-        );
-      }
       if (!fallbackWarningShown) {
         fallbackWarningShown = true;
-        console.warn(
-          '[jobStore] Netlify Blobs unavailable, using in-memory local dev fallback.',
-          sanitizeText(error && error.message)
-        );
+        const reason = sanitizeText(error && error.message);
+        if (process.env.NETLIFY) {
+          console.warn(
+            '[jobStore] Netlify Blobs unavailable in Netlify runtime; using temporary in-memory fallback.',
+            reason
+          );
+        } else {
+          console.warn(
+            '[jobStore] Netlify Blobs unavailable, using in-memory local dev fallback.',
+            reason
+          );
+        }
       }
       return null;
     }

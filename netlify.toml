@@ -5,6 +5,7 @@
   publish = "dist"
 
 [functions]
+  # With build.base="SoWhatAI", this resolves to SoWhatAI/netlify/functions.
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
@@ -23,16 +24,16 @@
 [functions."wcag-scan-status"]
   external_node_modules = ["@netlify/blobs"]
 
-[functions."wcag-run"]
+[functions.wcag-run]
   external_node_modules = ["playwright-core", "@sparticuz/chromium", "axe-core", "@netlify/blobs"]
 
-[functions."wcag-run-background"]
+[functions.wcag-run-background]
   external_node_modules = ["playwright-core", "@sparticuz/chromium", "axe-core", "@netlify/blobs"]
 
-[functions."wcag-start"]
+[functions.wcag-start]
   external_node_modules = ["@netlify/blobs"]
 
-[functions."wcag-status"]
+[functions.wcag-status]
   external_node_modules = ["@netlify/blobs"]
 
 [functions."wcag-only"]
