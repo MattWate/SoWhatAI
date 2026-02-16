@@ -1,12 +1,10 @@
 # This file is in the repository root
 [build]
-  base = "SoWhatAI"
-  command = "npm install && npm run build"
-  publish = "dist"
+  command = "cd SoWhatAI && npm install && npm run build"
+  publish = "SoWhatAI/dist"
 
 [functions]
-  # With build.base="SoWhatAI", this resolves to SoWhatAI/netlify/functions.
-  directory = "netlify/functions"
+  directory = "SoWhatAI/netlify/functions"
   node_bundler = "esbuild"
 
 [functions."wcag-scan"]
