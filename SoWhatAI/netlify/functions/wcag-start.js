@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { createJob, failJob } = require('./jobStore.js');
+const { handler: runBackgroundHandler } = require('./wcag-run-background.js');
 
 const DEFAULT_SINGLE_TIMEOUT_MS = 60000;
 const DEFAULT_CRAWL_TIMEOUT_MS = 90000;
@@ -7,7 +8,6 @@ const MIN_TIMEOUT_MS = 10000;
 const MAX_TIMEOUT_MS = 180000;
 const DEFAULT_CRAWL_MAX_PAGES = 3;
 const MAX_CRAWL_MAX_PAGES = 10;
-const BACKGROUND_TRIGGER_TIMEOUT_MS = 1200;
 
 function json(statusCode, body) {
   return {
@@ -64,62 +64,6 @@ function buildJobId() {
   return `wcag_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function resolveBaseUrl(event) {
-  const headers = (event && event.headers) || {};
-  const forwardedProto = headers['x-forwarded-proto'] || headers['X-Forwarded-Proto'];
-  const forwardedHost = headers['x-forwarded-host'] || headers['X-Forwarded-Host'];
-  const host = forwardedHost || headers.host || headers.Host || '';
-
-  if (host) {
-    const forwarded = String(forwardedProto || '').toLowerCase();
-    const looksLocal = /^localhost(?::\d+)?$/i.test(host) || /^127\.0\.0\.1(?::\d+)?$/i.test(host);
-    const protocol = forwarded === 'http' ? 'http' : forwarded === 'https' ? 'https' : looksLocal ? 'http' : 'https';
-    return `${protocol}://${host}`;
-  }
-
-  const fromEnv =
-    process.env.URL ||
-    process.env.DEPLOY_PRIME_URL ||
-    process.env.DEPLOY_URL ||
-    '';
-  if (fromEnv) {
-    return String(fromEnv).replace(/\/+$/, '');
-  }
-
-  return '';
-}
-
-async function triggerBackground(url, payload) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), BACKGROUND_TRIGGER_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: controller.signal
-    });
-
-    if (!response.ok) {
-      let message = `Background trigger failed (${response.status}).`;
-      try {
-        const body = await response.json();
-        message = sanitizeText(body?.error || body?.message || message, message);
-      } catch {}
-      throw new Error(message);
-    }
-  } catch (error) {
-    if (error && error.name === 'AbortError') {
-      // Fire-and-forget dispatch: timeout here does not imply dispatch failure.
-      return;
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
 exports.handler = async (event, context) => {
   if (context && typeof context === 'object') {
     context.callbackWaitsForEmptyEventLoop = false;
@@ -169,13 +113,14 @@ exports.handler = async (event, context) => {
       }
     });
 
-    const baseUrl = resolveBaseUrl(event);
-    if (!baseUrl) {
-      throw new Error('Unable to resolve base URL for background dispatch.');
-    }
-
-    const backgroundUrl = `${baseUrl}/.netlify/functions/wcag-run-background`;
-    await triggerBackground(backgroundUrl, { jobId });
+    runBackgroundHandler(
+      {
+        httpMethod: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId })
+      },
+      { callbackWaitsForEmptyEventLoop: false }
+    ).catch(() => {});
 
     return json(202, {
       jobId,
