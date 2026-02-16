@@ -320,7 +320,7 @@ export default function WcagScanPanel() {
             type="button"
             onClick={handleRun}
             disabled={running}
-            className="inline-flex items-center justify-center px-6 py-3 rounded-md text-black bg-[#EDC8FF] hover:bg-purple-200 disabled:bg-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center justify-center px-6 py-3 rounded-md text-white bg-[#EDC8FF] hover:bg-purple-200 disabled:bg-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors"
           >
             {running ? 'Running...' : 'Run scan'}
           </button>
