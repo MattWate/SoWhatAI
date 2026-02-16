@@ -55,6 +55,22 @@ async function handler(event, context) {
     return json(400, { error: 'jobId is required.' });
   }
 
+  if (typeof getJob !== 'function') {
+    return json(200, {
+      jobId,
+      status: 'failed',
+      progress: {
+        percent: 100,
+        message: 'Job not found or expired.'
+      },
+      result: null,
+      error: {
+        code: 'job_not_found',
+        message: 'Job not found or expired.'
+      }
+    });
+  }
+
   try {
     const job = await getJob(jobId);
     if (!job) {
