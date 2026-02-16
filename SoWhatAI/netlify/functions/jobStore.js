@@ -1,11 +1,10 @@
-const JOB_STORE_NAME = 'wcag-scan-jobs-v1';
+const JOB_STORE_NAME = 'wcag-jobs-v2';
 const JOB_KEY_PREFIX = 'job:';
 const JOB_TTL_MS = 30 * 60 * 1000;
-const MAX_ERROR_LENGTH = 280;
+const MAX_TEXT_LENGTH = 320;
 
-// Local-development fallback only. In Netlify runtime we require Blobs.
 const memoryStore = (() => {
-  const key = '__SOWHATAI_WCAG_JOB_STORE_V1__';
+  const key = '__SOWHATAI_WCAG_JOB_STORE_V2__';
   if (!globalThis[key]) {
     globalThis[key] = new Map();
   }
@@ -19,79 +18,71 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function toDateIso(value, fallbackMs) {
-  if (!value) {
-    return new Date(fallbackMs).toISOString();
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return new Date(fallbackMs).toISOString();
-  }
-  return parsed.toISOString();
-}
-
 function sanitizeText(value, fallback = '') {
-  const text = String(value || fallback).replace(/\s+/g, ' ').trim();
-  return text.slice(0, MAX_ERROR_LENGTH);
+  return String(value ?? fallback).replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT_LENGTH);
 }
 
-function sanitizeProgress(progress, existing) {
-  const previous = existing && typeof existing === 'object' ? existing : {};
-  const percentValue = Number(progress && progress.percent);
-  const percent = Number.isFinite(percentValue)
-    ? Math.max(0, Math.min(100, Math.round(percentValue)))
-    : Number.isFinite(Number(previous.percent))
-      ? Math.max(0, Math.min(100, Math.round(Number(previous.percent))))
-      : 0;
-  const message = sanitizeText(progress && progress.message, previous.message || '');
-  return { percent, message };
+function normalizeJobId(value) {
+  return sanitizeText(value, '').replace(/[^a-zA-Z0-9._:-]/g, '').slice(0, 120);
 }
 
-function sanitizeError(error) {
+function normalizeStatus(value, fallback = 'queued') {
+  const status = String(value || fallback).toLowerCase();
+  if (status === 'queued' || status === 'running' || status === 'complete' || status === 'failed') {
+    return status;
+  }
+  return fallback;
+}
+
+function normalizePercent(value, fallback = 0) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) {
+    return Math.max(0, Math.min(100, Math.round(numeric)));
+  }
+  return Math.max(0, Math.min(100, Math.round(Number(fallback) || 0)));
+}
+
+function normalizeProgress(progress, previous) {
+  const source = progress && typeof progress === 'object' ? progress : {};
+  const prior = previous && typeof previous === 'object' ? previous : {};
+  return {
+    percent: normalizePercent(source.percent, prior.percent),
+    message: sanitizeText(source.message, prior.message || 'Queued')
+  };
+}
+
+function normalizeError(error) {
   if (!error) return null;
   if (typeof error === 'string') {
     return { message: sanitizeText(error, 'Unknown error.') };
   }
-  const message = sanitizeText(error.message || error.error || 'Unknown error.');
-  const code = sanitizeText(error.code || '', '');
+  if (typeof error !== 'object') {
+    return { message: sanitizeText(String(error), 'Unknown error.') };
+  }
+  const code = sanitizeText(error.code, '');
+  const message = sanitizeText(error.message || error.error, 'Unknown error.');
   return code ? { code, message } : { message };
 }
 
-function withDefaults(jobId, record, fallbackPayload = null) {
-  const nowMs = Date.now();
-  const base = record && typeof record === 'object' ? record : {};
-  const createdAt = toDateIso(base.createdAt, nowMs);
-  const updatedAt = toDateIso(base.updatedAt, nowMs);
-  const expiresAt = toDateIso(base.expiresAt, nowMs + JOB_TTL_MS);
-  return {
-    jobId,
-    status: sanitizeText(base.status, 'queued') || 'queued',
-    progress: sanitizeProgress(base.progress, null),
-    payload: base.payload != null ? base.payload : fallbackPayload,
-    result: base.result ?? null,
-    error: sanitizeError(base.error),
-    createdAt,
-    updatedAt,
-    completedAt: base.completedAt ? toDateIso(base.completedAt, nowMs) : null,
-    expiresAt
-  };
+function toIso(value, fallbackMs) {
+  if (!value) return new Date(fallbackMs).toISOString();
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return new Date(fallbackMs).toISOString();
+  return parsed.toISOString();
 }
 
-function stripPayload(job) {
-  if (!job) return null;
-  const { payload, ...rest } = job;
+function isExpired(record) {
+  if (!record || !record.expiresAt) return false;
+  const ms = new Date(record.expiresAt).getTime();
+  if (!Number.isFinite(ms)) return false;
+  return Date.now() > ms;
+}
+
+function stripPayload(record, includePayload = false) {
+  if (!record) return null;
+  if (includePayload) return record;
+  const { payload, ...rest } = record;
   return rest;
-}
-
-function isExpired(job) {
-  if (!job || !job.expiresAt) return false;
-  const expiry = new Date(job.expiresAt).getTime();
-  if (!Number.isFinite(expiry)) return false;
-  return Date.now() > expiry;
-}
-
-function jobKey(jobId) {
-  return `${JOB_KEY_PREFIX}${String(jobId || '').trim()}`;
 }
 
 function toRawText(raw) {
@@ -114,6 +105,10 @@ function toRawText(raw) {
   return '';
 }
 
+function jobKey(jobId) {
+  return `${JOB_KEY_PREFIX}${jobId}`;
+}
+
 async function getBlobStore() {
   if (blobStorePromise) return blobStorePromise;
 
@@ -122,32 +117,23 @@ async function getBlobStore() {
       let module = null;
       try {
         module = require('@netlify/blobs');
-      } catch {}
-      if (!module) {
+      } catch {
         module = await import('@netlify/blobs');
       }
       const getStore =
         (module && typeof module.getStore === 'function' && module.getStore) ||
         (module && module.default && typeof module.default.getStore === 'function' && module.default.getStore);
       if (typeof getStore !== 'function') {
-        throw new Error('getStore not available from @netlify/blobs.');
+        throw new Error('getStore is unavailable.');
       }
       return getStore(JOB_STORE_NAME);
     } catch (error) {
       if (!fallbackWarningShown) {
         fallbackWarningShown = true;
-        const reason = sanitizeText(error && error.message);
-        if (process.env.NETLIFY) {
-          console.warn(
-            '[jobStore] Netlify Blobs unavailable in Netlify runtime; using temporary in-memory fallback.',
-            reason
-          );
-        } else {
-          console.warn(
-            '[jobStore] Netlify Blobs unavailable, using in-memory local dev fallback.',
-            reason
-          );
-        }
+        console.warn(
+          '[jobStore] @netlify/blobs unavailable, using in-memory fallback.',
+          sanitizeText(error && error.message, 'Unknown load error.')
+        );
       }
       return null;
     }
@@ -156,15 +142,33 @@ async function getBlobStore() {
   return blobStorePromise;
 }
 
+function normalizeRecord(jobId, input = {}) {
+  const now = Date.now();
+  const record = input && typeof input === 'object' ? input : {};
+  return {
+    jobId,
+    status: normalizeStatus(record.status, 'queued'),
+    progress: normalizeProgress(record.progress, null),
+    payload: Object.prototype.hasOwnProperty.call(record, 'payload') ? record.payload : null,
+    result: Object.prototype.hasOwnProperty.call(record, 'result') ? record.result : null,
+    error: normalizeError(record.error),
+    createdAt: toIso(record.createdAt, now),
+    updatedAt: toIso(record.updatedAt, now),
+    completedAt: record.completedAt ? toIso(record.completedAt, now) : null,
+    expiresAt: toIso(record.expiresAt, now + JOB_TTL_MS)
+  };
+}
+
 async function writeRecord(jobId, record) {
+  const normalized = normalizeRecord(jobId, record);
   const key = jobKey(jobId);
-  const normalized = withDefaults(jobId, record);
   const store = await getBlobStore();
+
   if (store) {
     await store.set(key, JSON.stringify(normalized));
-  } else {
-    memoryStore.set(key, normalized);
   }
+
+  memoryStore.set(key, normalized);
   return normalized;
 }
 
@@ -179,177 +183,157 @@ async function deleteRecord(jobId) {
 
 async function readRecord(jobId) {
   const key = jobKey(jobId);
-  let raw = null;
   const store = await getBlobStore();
+  let parsed = null;
 
   if (store) {
     try {
-      raw = await store.get(key);
+      const raw = await store.get(key);
+      if (raw) {
+        parsed = JSON.parse(toRawText(raw));
+      }
     } catch {
-      raw = null;
+      parsed = null;
     }
   }
 
-  if (!raw) {
-    const fromMemory = memoryStore.get(key);
-    if (!fromMemory) return null;
-    const memoryRecord = withDefaults(jobId, fromMemory);
-    if (isExpired(memoryRecord)) {
-      memoryStore.delete(key);
-      return null;
-    }
-    return memoryRecord;
+  if (!parsed) {
+    parsed = memoryStore.get(key) || null;
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return null;
   }
 
-  let parsed = null;
-  try {
-    parsed = JSON.parse(toRawText(raw));
-  } catch {
-    parsed = null;
-  }
-  if (!parsed || typeof parsed !== 'object') return null;
-  const record = withDefaults(jobId, parsed);
-  if (isExpired(record)) {
+  const normalized = normalizeRecord(jobId, parsed);
+  if (isExpired(normalized)) {
     await deleteRecord(jobId);
     return null;
   }
-  return record;
+
+  memoryStore.set(key, normalized);
+  return normalized;
 }
 
-function buildBaseJob(jobId, payload) {
+function mergeRecord(existing, patch = {}) {
+  const source = patch && typeof patch === 'object' ? patch : {};
   const now = Date.now();
-  return {
-    jobId,
+  const next = { ...existing };
+
+  if (Object.prototype.hasOwnProperty.call(source, 'status')) {
+    next.status = normalizeStatus(source.status, existing.status);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(source, 'progress')) {
+    next.progress = normalizeProgress(source.progress, existing.progress);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(source, 'payload')) {
+    next.payload = source.payload;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(source, 'result')) {
+    next.result = source.result;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(source, 'error')) {
+    next.error = normalizeError(source.error);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(source, 'completedAt')) {
+    next.completedAt = source.completedAt ? toIso(source.completedAt, now) : null;
+  }
+
+  next.updatedAt = new Date(now).toISOString();
+  next.expiresAt = Object.prototype.hasOwnProperty.call(source, 'expiresAt')
+    ? toIso(source.expiresAt, now + JOB_TTL_MS)
+    : new Date(now + JOB_TTL_MS).toISOString();
+
+  return normalizeRecord(existing.jobId, next);
+}
+
+function createSeedRecord(input, payloadOverride) {
+  const now = Date.now();
+
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    const jobId = normalizeJobId(input.jobId);
+    if (!jobId) throw new Error('jobId is required.');
+    return normalizeRecord(jobId, {
+      ...input,
+      payload: Object.prototype.hasOwnProperty.call(input, 'payload') ? input.payload : payloadOverride,
+      createdAt: input.createdAt || new Date(now).toISOString(),
+      updatedAt: new Date(now).toISOString(),
+      expiresAt: input.expiresAt || new Date(now + JOB_TTL_MS).toISOString()
+    });
+  }
+
+  const jobId = normalizeJobId(input);
+  if (!jobId) throw new Error('jobId is required.');
+  return normalizeRecord(jobId, {
     status: 'queued',
-    progress: {
-      percent: 0,
-      message: 'Queued for processing.'
-    },
-    payload: payload || null,
+    progress: { percent: 0, message: 'Queued' },
+    payload: payloadOverride ?? null,
     result: null,
     error: null,
     createdAt: new Date(now).toISOString(),
     updatedAt: new Date(now).toISOString(),
     completedAt: null,
     expiresAt: new Date(now + JOB_TTL_MS).toISOString()
-  };
+  });
 }
 
-function mergeJob(existing, patch) {
-  const now = Date.now();
-  const merged = withDefaults(existing.jobId, existing);
-
-  if (patch && typeof patch === 'object') {
-    if (patch.status != null) {
-      merged.status = sanitizeText(patch.status, merged.status) || merged.status;
-    }
-    if (patch.progress != null) {
-      merged.progress = sanitizeProgress(patch.progress, merged.progress);
-    }
-    if (Object.prototype.hasOwnProperty.call(patch, 'payload')) {
-      merged.payload = patch.payload;
-    }
-    if (Object.prototype.hasOwnProperty.call(patch, 'result')) {
-      merged.result = patch.result;
-    }
-    if (Object.prototype.hasOwnProperty.call(patch, 'error')) {
-      merged.error = sanitizeError(patch.error);
-    }
-    if (patch.completedAt) {
-      merged.completedAt = toDateIso(patch.completedAt, now);
-    }
-    if (patch.expiresAt) {
-      merged.expiresAt = toDateIso(patch.expiresAt, now + JOB_TTL_MS);
-    } else if (patch.extendTtl !== false) {
-      merged.expiresAt = new Date(now + JOB_TTL_MS).toISOString();
-    }
-  }
-
-  merged.updatedAt = new Date(now).toISOString();
-  return merged;
-}
-
-async function createJob(jobOrId, payload) {
-  let normalizedId = '';
-  let seedRecord = null;
-
-  if (jobOrId && typeof jobOrId === 'object' && !Array.isArray(jobOrId)) {
-    normalizedId = String(jobOrId.jobId || '').trim();
-    if (!normalizedId) {
-      throw new Error('jobId is required.');
-    }
-    seedRecord = withDefaults(normalizedId, {
-      status: jobOrId.status,
-      progress: jobOrId.progress,
-      payload: Object.prototype.hasOwnProperty.call(jobOrId, 'payload') ? jobOrId.payload : payload,
-      result: Object.prototype.hasOwnProperty.call(jobOrId, 'result') ? jobOrId.result : null,
-      error: Object.prototype.hasOwnProperty.call(jobOrId, 'error') ? jobOrId.error : null,
-      createdAt: jobOrId.createdAt,
-      updatedAt: jobOrId.updatedAt,
-      completedAt: jobOrId.completedAt,
-      expiresAt: jobOrId.expiresAt
-    });
-  } else {
-    normalizedId = String(jobOrId || '').trim();
-    if (!normalizedId) {
-      throw new Error('jobId is required.');
-    }
-    seedRecord = buildBaseJob(normalizedId, payload);
-  }
-
-  const saved = await writeRecord(normalizedId, seedRecord);
+async function createJob(jobOrRecord, payload) {
+  const seed = createSeedRecord(jobOrRecord, payload);
+  const saved = await writeRecord(seed.jobId, seed);
   return stripPayload(saved);
 }
 
-async function updateJob(jobId, patch) {
-  const normalizedId = String(jobId || '').trim();
-  if (!normalizedId) {
-    throw new Error('jobId is required.');
-  }
-  const existing = await readRecord(normalizedId);
+async function updateJob(jobIdValue, patch = {}) {
+  const jobId = normalizeJobId(jobIdValue);
+  if (!jobId) throw new Error('jobId is required.');
+
+  const existing = await readRecord(jobId);
   if (!existing) return null;
-  const merged = mergeJob(existing, patch || {});
-  const saved = await writeRecord(normalizedId, merged);
+
+  const merged = mergeRecord(existing, patch);
+  const saved = await writeRecord(jobId, merged);
   return stripPayload(saved);
 }
 
-async function getJob(jobId, options = {}) {
-  const normalizedId = String(jobId || '').trim();
-  if (!normalizedId) return null;
-  const job = await readRecord(normalizedId);
-  if (!job) return null;
-  return options.includePayload ? job : stripPayload(job);
+async function getJob(jobIdValue, options = {}) {
+  const jobId = normalizeJobId(jobIdValue);
+  if (!jobId) return null;
+
+  const record = await readRecord(jobId);
+  if (!record) return null;
+  return stripPayload(record, Boolean(options && options.includePayload));
 }
 
-async function completeJob(jobId, result) {
-  const normalizedId = String(jobId || '').trim();
-  if (!normalizedId) {
-    throw new Error('jobId is required.');
-  }
+async function completeJob(jobIdValue, result) {
+  const jobId = normalizeJobId(jobIdValue);
+  if (!jobId) throw new Error('jobId is required.');
+
   const completedAt = nowIso();
-  const updated = await updateJob(normalizedId, {
+  return updateJob(jobId, {
     status: 'complete',
     progress: { percent: 100, message: 'Complete' },
-    result,
+    result: result ?? null,
     error: null,
     completedAt
   });
-  return updated;
 }
 
-async function failJob(jobId, error) {
-  const normalizedId = String(jobId || '').trim();
-  if (!normalizedId) {
-    throw new Error('jobId is required.');
-  }
+async function failJob(jobIdValue, error) {
+  const jobId = normalizeJobId(jobIdValue);
+  if (!jobId) throw new Error('jobId is required.');
+
+  const normalizedError = normalizeError(error) || { message: 'Scan failed.' };
   const completedAt = nowIso();
-  const updated = await updateJob(normalizedId, {
+  return updateJob(jobId, {
     status: 'failed',
-    progress: { percent: 100, message: 'Scan failed.' },
-    error: sanitizeError(error),
+    progress: { percent: 100, message: normalizedError.message || 'Scan failed.' },
+    error: normalizedError,
     completedAt
   });
-  return updated;
 }
 
 module.exports = {

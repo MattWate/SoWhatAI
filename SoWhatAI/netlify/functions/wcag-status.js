@@ -11,21 +11,22 @@ function json(statusCode, body) {
 }
 
 function sanitizeText(value, fallback = '') {
-  return String(value || fallback).replace(/\s+/g, ' ').trim().slice(0, 280);
+  return String(value ?? fallback).replace(/\s+/g, ' ').trim().slice(0, 320);
 }
 
 function normalizeStatus(value) {
-  const raw = String(value || '').toLowerCase();
-  if (raw === 'running' || raw === 'complete' || raw === 'failed' || raw === 'queued') {
-    return raw;
+  const status = String(value || '').toLowerCase();
+  if (status === 'queued' || status === 'running' || status === 'complete' || status === 'failed') {
+    return status;
   }
   return 'queued';
 }
 
 function normalizeProgress(progress) {
   const source = progress && typeof progress === 'object' ? progress : {};
-  const percentValue = Number(source.percent);
-  const percent = Number.isFinite(percentValue) ? Math.max(0, Math.min(100, Math.round(percentValue))) : 0;
+  const percent = Number.isFinite(Number(source.percent))
+    ? Math.max(0, Math.min(100, Math.round(Number(source.percent))))
+    : 0;
   const message = sanitizeText(source.message, 'Queued');
   return { percent, message };
 }
@@ -33,73 +34,57 @@ function normalizeProgress(progress) {
 function normalizeError(error) {
   if (!error) return null;
   if (typeof error === 'string') {
-    return { message: sanitizeText(error) };
+    return { message: sanitizeText(error, 'Unknown error.') };
   }
-  const message = sanitizeText(error.message || error.error || 'Unknown error.');
-  const code = sanitizeText(error.code || '', '');
+  const message = sanitizeText(error.message || error.error, 'Unknown error.');
+  const code = sanitizeText(error.code, '');
   return code ? { code, message } : { message };
 }
 
-async function handler(event, context) {
+function notFoundPayload(jobId) {
+  return {
+    jobId,
+    status: 'failed',
+    progress: {
+      percent: 100,
+      message: 'Job not found or expired.'
+    },
+    result: null,
+    error: {
+      code: 'job_not_found',
+      message: 'Job not found or expired.'
+    }
+  };
+}
+
+exports.handler = async (event, context) => {
   if (context && typeof context === 'object') {
     context.callbackWaitsForEmptyEventLoop = false;
   }
 
   if (event.httpMethod !== 'GET') {
-    return json(405, { error: 'Method Not Allowed' });
+    return json(405, { error: 'method_not_allowed', message: 'GET is required.' });
   }
 
   const query = event.queryStringParameters || {};
-  const jobId = String(query.jobId || '').trim();
+  const jobId = sanitizeText(query.jobId, '');
   if (!jobId) {
-    return json(400, { error: 'jobId is required.' });
-  }
-
-  if (typeof getJob !== 'function') {
-    return json(200, {
-      jobId,
-      status: 'failed',
-      progress: {
-        percent: 100,
-        message: 'Job not found or expired.'
-      },
-      result: null,
-      error: {
-        code: 'job_not_found',
-        message: 'Job not found or expired.'
-      }
-    });
+    return json(400, { error: 'validation_error', message: 'jobId is required.' });
   }
 
   try {
     const job = await getJob(jobId);
     if (!job) {
-      return json(200, {
-        jobId,
-        status: 'failed',
-        progress: {
-          percent: 100,
-          message: 'Job not found or expired.'
-        },
-        result: null,
-        error: {
-          code: 'job_not_found',
-          message: 'Job not found or expired.'
-        }
-      });
+      return json(200, notFoundPayload(jobId));
     }
 
     const status = normalizeStatus(job.status);
-    const progress = normalizeProgress(job.progress);
-    const result = status === 'complete' ? (job.result ?? null) : null;
-    const error = status === 'failed' ? normalizeError(job.error) : null;
-
     return json(200, {
       jobId,
       status,
-      progress,
-      result,
-      error
+      progress: normalizeProgress(job.progress),
+      result: status === 'complete' ? (job.result ?? null) : null,
+      error: status === 'failed' ? normalizeError(job.error) : null
     });
   } catch (error) {
     return json(200, {
@@ -112,11 +97,8 @@ async function handler(event, context) {
       result: null,
       error: {
         code: 'status_lookup_failed',
-        message: sanitizeText(error?.message || String(error), 'Unable to load job status.')
+        message: sanitizeText(error && error.message, 'Unable to load job status.')
       }
     });
   }
-}
-
-exports.handler = handler;
-module.exports.handler = handler;
+};
