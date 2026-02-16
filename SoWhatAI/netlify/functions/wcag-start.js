@@ -64,7 +64,7 @@ function buildJobId() {
   return `wcag_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-exports.handler = async (event, context) => {
+async function handler(event, context) {
   if (context && typeof context === 'object') {
     context.callbackWaitsForEmptyEventLoop = false;
   }
@@ -137,4 +137,7 @@ exports.handler = async (event, context) => {
       }
     });
   }
-};
+}
+
+exports.handler = handler;
+module.exports.handler = handler;
