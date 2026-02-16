@@ -1,3 +1,5 @@
+const { getJob } = require('./jobStore.js');
+
 function json(statusCode, body) {
   return {
     statusCode,
@@ -51,34 +53,6 @@ async function handler(event, context) {
   const jobId = String(query.jobId || '').trim();
   if (!jobId) {
     return json(400, { error: 'jobId is required.' });
-  }
-
-  let getJob = null;
-  try {
-    const storeModule = require('./jobStore.js');
-    if (storeModule && typeof storeModule.getJob === 'function') {
-      getJob = storeModule.getJob;
-    }
-  } catch (error) {
-    console.error('[wcag-status] failed to load jobStore', {
-      message: sanitizeText(error?.message || String(error))
-    });
-  }
-
-  if (typeof getJob !== 'function') {
-    return json(200, {
-      jobId,
-      status: 'failed',
-      progress: {
-        percent: 100,
-        message: 'Status handler unavailable.'
-      },
-      result: null,
-      error: {
-        code: 'status_handler_unavailable',
-        message: 'WCAG status handler is unavailable.'
-      }
-    });
   }
 
   try {
