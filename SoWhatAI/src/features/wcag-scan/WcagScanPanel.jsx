@@ -91,6 +91,23 @@ function groupIssuesByImpact(issues) {
   return groups;
 }
 
+const IMPACT_COLORS = {
+  critical: 'bg-red-900/60 text-red-300 border border-red-700',
+  serious:  'bg-orange-900/60 text-orange-300 border border-orange-700',
+  moderate: 'bg-yellow-900/60 text-yellow-300 border border-yellow-700',
+  minor:    'bg-blue-900/60 text-blue-300 border border-blue-700',
+  unknown:  'bg-gray-800 text-gray-400 border border-gray-600',
+};
+
+function ImpactBadge({ impact }) {
+  const key = normalizeImpact(impact);
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold capitalize ${IMPACT_COLORS[key]}`}>
+      {key}
+    </span>
+  );
+}
+
 async function copyToClipboard(text) {
   if (!text) return;
 
@@ -126,6 +143,7 @@ export default function WcagScanPanel() {
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
   const [copyMessage, setCopyMessage] = useState('');
+  const [expandedIssues, setExpandedIssues] = useState(new Set());
 
   const urlError = useMemo(() => {
     const value = String(startUrl || '').trim();
@@ -167,6 +185,7 @@ export default function WcagScanPanel() {
     setCopyMessage('');
     setResult(null);
     setJobId('');
+    setExpandedIssues(new Set());
 
     if (urlError) {
       setError(urlError);
@@ -232,6 +251,14 @@ export default function WcagScanPanel() {
     }
   }
 
+  function toggleIssue(key) {
+    setExpandedIssues((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+
   async function handleCopyJson() {
     if (!rawJson) return;
     try {
@@ -240,6 +267,27 @@ export default function WcagScanPanel() {
     } catch {
       setCopyMessage('Copy failed.');
     }
+  }
+
+  function handleDownloadCsv() {
+    if (!issues.length) return;
+    const header = ['Impact', 'Rule ID', 'Description', 'Pages Affected', 'CSS Selector'];
+    const rows = issues.map((issue) => [
+      normalizeImpact(issue && issue.impact),
+      sanitizeText(issue && issue.id, 'unknown_rule'),
+      sanitizeText(issue && issue.description, ''),
+      sanitizeText(issue && issue.pageUrl, ''),
+      getFirstNode(issue).selector,
+    ]);
+    const escape = (val) => `"${String(val).replace(/"/g, '""')}"`;
+    const csv = [header, ...rows].map((row) => row.map(escape).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'wcag-violations.csv';
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -363,25 +411,46 @@ export default function WcagScanPanel() {
           <div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <h3 className="text-xl font-semibold text-white">Results</h3>
-              <button
-                type="button"
-                onClick={handleCopyJson}
-                className="px-3 py-2 text-sm rounded-md border border-gray-600 text-gray-200 hover:bg-gray-800"
-              >
-                Copy JSON
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadCsv}
+                  disabled={!issues.length}
+                  className="px-3 py-2 text-sm rounded-md border border-gray-600 text-gray-200 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Download CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyJson}
+                  className="px-3 py-2 text-sm rounded-md border border-gray-600 text-gray-200 hover:bg-gray-800"
+                >
+                  Copy JSON
+                </button>
+              </div>
             </div>
             {copyMessage ? <p className="text-xs text-teal-300">{copyMessage}</p> : null}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="rounded border border-gray-700 p-3">
-                <p className="text-xs text-gray-400">Accessibility score</p>
-                <p className="text-xl font-semibold text-white">
-                  {Number.isFinite(Number(summary.accessibilityScore))
-                    ? Math.round(Number(summary.accessibilityScore))
-                    : 'n/a'}
-                </p>
-              </div>
+              {(() => {
+                const score = Number.isFinite(Number(summary.accessibilityScore))
+                  ? Math.round(Number(summary.accessibilityScore))
+                  : null;
+                const pass = score !== null && score >= 90;
+                const fail = score !== null && score < 90;
+                return (
+                  <div className={`rounded border p-3 ${pass ? 'border-green-700 bg-green-950/20' : fail ? 'border-red-700 bg-red-950/20' : 'border-gray-700'}`}>
+                    <p className="text-xs text-gray-400">Accessibility score</p>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <p className={`text-xl font-semibold ${pass ? 'text-green-300' : fail ? 'text-red-300' : 'text-white'}`}>
+                        {score !== null ? score : 'n/a'}
+                      </p>
+                      {pass && <span className="text-xs font-semibold text-green-400 uppercase tracking-wide">Pass</span>}
+                      {fail && <span className="text-xs font-semibold text-red-400 uppercase tracking-wide">Fail</span>}
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="rounded border border-gray-700 p-3">
                 <p className="text-xs text-gray-400">Pages scanned</p>
                 <p className="text-xl font-semibold text-white">{pages.length}</p>
@@ -417,12 +486,12 @@ export default function WcagScanPanel() {
           <div className="bg-gray-900/50 backdrop-blur-lg border border-gray-700/50 rounded-lg shadow-2xl p-6 space-y-4">
             <h3 className="text-xl font-semibold text-white">Issues by impact</h3>
             <div className="space-y-4">
-              {IMPACT_ORDER.map((impact) => {
+              {IMPACT_ORDER.filter((impact) => (groupedIssues[impact] || []).length > 0).map((impact) => {
                 const impactIssues = groupedIssues[impact] || [];
                 return (
                   <div key={impact} className="rounded border border-gray-700 p-4 bg-gray-900/40 space-y-3">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-semibold text-white capitalize">{impact}</h4>
+                      <ImpactBadge impact={impact} />
                       <span className="text-xs text-gray-400">{impactIssues.length} rules</span>
                     </div>
 
@@ -438,16 +507,44 @@ export default function WcagScanPanel() {
                           const help = sanitizeText(issue && issue.help, 'No guidance provided.');
                           const nodeCount = getIssueNodeCount(issue);
 
+                          const issueKey = `${issueId}-${index}`;
+                          const isExpanded = expandedIssues.has(issueKey);
                           return (
-                            <div key={`${issueId}-${index}`} className="rounded border border-gray-700 p-3 bg-gray-950/40 space-y-1">
-                              <p className="text-sm text-white font-medium">{issueId}</p>
-                              <p className="text-xs text-gray-300">{description}</p>
-                              <p className="text-xs text-gray-400">Help: {help}</p>
-                              <p className="text-xs text-gray-400">
-                                Impact: {normalizeImpact(issue && issue.impact)} | Nodes: {nodeCount}
-                              </p>
-                              <p className="text-xs text-gray-400 break-all">First selector: {firstNode.selector}</p>
-                              <p className="text-xs text-gray-500 break-all">Snippet: {firstNode.snippet}</p>
+                            <div key={issueKey} className="rounded border border-gray-700 bg-gray-950/40">
+                              <button
+                                type="button"
+                                onClick={() => toggleIssue(issueKey)}
+                                className="w-full flex items-start justify-between gap-3 p-3 text-left hover:bg-gray-800/40 transition-colors"
+                              >
+                                <div className="space-y-1 min-w-0">
+                                  <p className="text-sm text-white font-medium">{issueId}</p>
+                                  <p className="text-xs text-gray-300">{description}</p>
+                                  <div className="flex items-center gap-2">
+                                    <ImpactBadge impact={issue && issue.impact} />
+                                    <span className="text-xs text-gray-400">Nodes: {nodeCount}</span>
+                                  </div>
+                                </div>
+                                <span className="text-gray-500 text-xs mt-1 shrink-0">
+                                  {isExpanded ? '▲' : '▼'}
+                                </span>
+                              </button>
+                              {isExpanded && (
+                                <div className="px-3 pb-3 space-y-2 border-t border-gray-700/60 pt-2">
+                                  <p className="text-xs text-gray-400">Help: {help}</p>
+                                  <p className="text-xs text-gray-400 break-all">Selector: {firstNode.selector}</p>
+                                  <p className="text-xs text-gray-500 font-mono break-all">Snippet: {firstNode.snippet}</p>
+                                  {sanitizeText(issue && issue.helpUrl) ? (
+                                    <a
+                                      href={sanitizeText(issue.helpUrl)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-block text-xs text-[#13BBAF] hover:underline"
+                                    >
+                                      axe rule docs ↗
+                                    </a>
+                                  ) : null}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
