@@ -1,4 +1,4 @@
-const BACKGROUND_PATH = '/.netlify/functions/wcag-run-background';
+const BACKGROUND_PATH = '/.netlify/functions/run-wcag-scan-background';
 const MIN_TIMEOUT_MS = 10000;
 const MAX_TIMEOUT_MS = 25000;
 const JOB_TTL_MS = 30 * 60 * 1000;
