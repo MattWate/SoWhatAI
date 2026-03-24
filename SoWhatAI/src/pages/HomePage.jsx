@@ -1,4 +1,5 @@
 import React from 'react';
+import VersionBadge from '../components/VersionBadge';
 
 const HomePage = ({ onNavigate }) => (
     <div className="text-center py-16 sm:py-24">
@@ -28,6 +29,9 @@ const HomePage = ({ onNavigate }) => (
                 <h3 className="text-lg font-semibold text-white">Interactive Reports</h3>
                 <p className="mt-2 text-gray-400">Explore your findings with interactive charts and downloadable reports, ready for your stakeholders.</p>
             </div>
+        </div>
+        <div className="mt-8 flex justify-center">
+          <VersionBadge />
         </div>
     </div>
 );

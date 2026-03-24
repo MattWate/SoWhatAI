@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient'; // Make sure this path is correct
+import VersionBadge from '../components/VersionBadge';
 
 const DashboardPage = ({ user, onNavigate }) => {
     const [projects, setProjects] = useState([]);
@@ -71,6 +72,9 @@ const DashboardPage = ({ user, onNavigate }) => {
                     </div>
                 )}
             </div>
+        </div>
+        <div className="pt-4 flex justify-end">
+          <VersionBadge />
         </div>
     );
 };
