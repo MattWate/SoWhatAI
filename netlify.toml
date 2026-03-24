@@ -20,30 +20,10 @@
 [functions."run-wcag-scan-background"]
   external_node_modules = ["playwright-core", "@sparticuz/chromium", "axe-core", "@netlify/blobs"]
 
-[functions."start-wcag-scan"]
-  external_node_modules = ["@netlify/blobs"]
-
-[functions."wcag-scan-status"]
-  external_node_modules = ["@netlify/blobs"]
-
-[functions.wcag-run]
-  external_node_modules = ["playwright-core", "@sparticuz/chromium", "axe-core", "@netlify/blobs"]
-
-[functions.wcag-run-background]
-  external_node_modules = [
-    "playwright-core",
-    "@sparticuz/chromium",
-    "axe-core",
-    "@netlify/blobs"
-  ]
-
 [functions.wcag-start]
   external_node_modules = ["@netlify/blobs"]
 
 [functions.wcag-status]
-  external_node_modules = ["@netlify/blobs"]
-
-[functions."wcag-only"]
   external_node_modules = ["@netlify/blobs"]
 
 [functions."capture-page"]
