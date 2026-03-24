@@ -127,7 +127,7 @@ async function handler(event, context) {
   let createJob = null;
   let failJob = null;
   try {
-    const storeModule = require('./jobStore.js');
+    const storeModule = require('./jobStore.cjs');
     createJob = storeModule.createJob;
     failJob = storeModule.failJob;
   } catch (error) {

@@ -635,7 +635,7 @@ function buildFailureResponse(requestInput, durationMs, errorMessage) {
   };
 }
 
-exports.handler = async (event, context) => {
+export const handler = async (event, context) => {
   if (context && typeof context === 'object') {
     context.callbackWaitsForEmptyEventLoop = false;
   }

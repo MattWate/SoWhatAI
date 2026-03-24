@@ -1,6 +1,6 @@
 const axeCore = require('axe-core');
 const { JSDOM } = require('jsdom');
-const { getSnapshot, saveAnalysis, updateStatus } = require('./snapshotStore.js');
+const { getSnapshot, saveAnalysis, updateStatus } = require('./snapshotStore.cjs');
 
 const RESPONSE_HEADERS = {
   'Content-Type': 'application/json',

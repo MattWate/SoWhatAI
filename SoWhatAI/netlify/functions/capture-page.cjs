@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { saveSnapshot, updateStatus } = require('./snapshotStore.js');
+const { saveSnapshot, updateStatus } = require('./snapshotStore.cjs');
 
 const DEFAULT_TIMEOUT_MS = 8000;
 const MIN_TIMEOUT_MS = 1500;

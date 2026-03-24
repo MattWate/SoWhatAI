@@ -1,4 +1,4 @@
-const { getAnalysis } = require('./snapshotStore.js');
+const { getAnalysis } = require('./snapshotStore.cjs');
 
 const RESPONSE_HEADERS = {
   'Content-Type': 'application/json',

@@ -97,7 +97,7 @@ function normalizeEngineResult(engine, rawResult, startUrl, strategy, fallbackRe
   return data;
 }
 
-exports.handler = async (event, context) => {
+export const handler = async (event, context) => {
   if (context && typeof context === 'object') {
     context.callbackWaitsForEmptyEventLoop = false;
   }

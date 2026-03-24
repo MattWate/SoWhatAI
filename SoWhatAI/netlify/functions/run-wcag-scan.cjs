@@ -1,4 +1,4 @@
-const { getJob, updateJob, completeJob, failJob } = require('./jobStore.js');
+const { getJob, updateJob, completeJob, failJob } = require('./jobStore.cjs');
 
 const HEARTBEAT_INTERVAL_MS = 4000;
 const PSI_TIMEOUT_MS = 12000;

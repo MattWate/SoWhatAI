@@ -1,4 +1,4 @@
-const { getSnapshot, updateStatus } = require('./snapshotStore.js');
+const { getSnapshot, updateStatus } = require('./snapshotStore.cjs');
 
 const BACKGROUND_TRIGGER_TIMEOUT_MS = 1200;
 const RESPONSE_HEADERS = {

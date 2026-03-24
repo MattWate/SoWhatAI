@@ -1,4 +1,4 @@
-const { getJob } = require('./jobStore.js');
+const { getJob } = require('./jobStore.cjs');
 
 function json(statusCode, body) {
   return {
