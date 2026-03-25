@@ -1,3 +1,5 @@
+const { createJob, failJob } = require('./jobStore.cjs');
+
 const BACKGROUND_PATH = '/.netlify/functions/run-wcag-scan-background';
 const MIN_TIMEOUT_MS = 10000;
 const MAX_TIMEOUT_MS = 25000;
@@ -122,19 +124,6 @@ function triggerBackground(jobId, event, onFailure) {
 async function handler(event, context) {
   if (context && typeof context === 'object') {
     context.callbackWaitsForEmptyEventLoop = false;
-  }
-
-  let createJob = null;
-  let failJob = null;
-  try {
-    const storeModule = require('./jobStore.cjs');
-    createJob = storeModule.createJob;
-    failJob = storeModule.failJob;
-  } catch (error) {
-    return json(500, {
-      error: 'job_store_unavailable',
-      message: sanitizeText(error && error.message, 'Unable to load job store.')
-    });
   }
 
   if (event.httpMethod !== 'POST') {

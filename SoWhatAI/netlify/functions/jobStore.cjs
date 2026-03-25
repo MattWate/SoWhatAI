@@ -1,17 +1,18 @@
-const JOB_STORE_NAME = 'wcag-jobs-v2';
-const JOB_KEY_PREFIX = 'job:';
+const BUCKET_NAME = 'wcag-jobs';
+const JOB_PATH_PREFIX = 'jobs/';
 const JOB_TTL_MS = 30 * 60 * 1000;
 const MAX_TEXT_LENGTH = 320;
 
 const memoryStore = (() => {
-  const key = '__SOWHATAI_WCAG_JOB_STORE_V2__';
+  const key = '__SOWHATAI_WCAG_JOB_STORE_V3__';
   if (!globalThis[key]) {
     globalThis[key] = new Map();
   }
   return globalThis[key];
 })();
 
-let blobStorePromise = null;
+let supabaseClient = null;
+let supabaseInitAttempted = false;
 let fallbackWarningShown = false;
 
 function nowIso() {
@@ -85,61 +86,35 @@ function stripPayload(record, includePayload = false) {
   return rest;
 }
 
-function toRawText(raw) {
-  if (raw == null) return '';
-  if (typeof raw === 'string') return raw;
-  if (raw instanceof Uint8Array) {
-    try {
-      return new TextDecoder().decode(raw);
-    } catch {
-      return '';
-    }
-  }
-  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(raw)) {
-    return raw.toString('utf8');
-  }
-  if (typeof raw === 'object' && typeof raw.toString === 'function') {
-    const text = raw.toString();
-    return typeof text === 'string' ? text : '';
-  }
-  return '';
+function jobPath(jobId) {
+  return `${JOB_PATH_PREFIX}${jobId}.json`;
 }
 
-function jobKey(jobId) {
-  return `${JOB_KEY_PREFIX}${jobId}`;
-}
-
-async function getBlobStore() {
-  if (blobStorePromise) return blobStorePromise;
-
-  blobStorePromise = (async () => {
-    try {
-      let module = null;
-      try {
-        module = require('@netlify/blobs');
-      } catch {
-        module = await import('@netlify/blobs');
-      }
-      const getStore =
-        (module && typeof module.getStore === 'function' && module.getStore) ||
-        (module && module.default && typeof module.default.getStore === 'function' && module.default.getStore);
-      if (typeof getStore !== 'function') {
-        throw new Error('getStore is unavailable.');
-      }
-      return getStore(JOB_STORE_NAME);
-    } catch (error) {
-      if (!fallbackWarningShown) {
-        fallbackWarningShown = true;
-        console.warn(
-          '[jobStore] @netlify/blobs unavailable, using in-memory fallback.',
-          sanitizeText(error && error.message, 'Unknown load error.')
-        );
-      }
-      return null;
+function getSupabaseClient() {
+  if (supabaseClient) return supabaseClient;
+  if (supabaseInitAttempted) return null;
+  supabaseInitAttempted = true;
+  try {
+    const url = process.env.SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !serviceKey) {
+      throw new Error('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set.');
     }
-  })();
-
-  return blobStorePromise;
+    const { createClient } = require('@supabase/supabase-js');
+    supabaseClient = createClient(url, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+    return supabaseClient;
+  } catch (error) {
+    if (!fallbackWarningShown) {
+      fallbackWarningShown = true;
+      console.warn(
+        '[jobStore] Supabase client init failed, using in-memory fallback.',
+        sanitizeText(error && error.message, 'Unknown init error.')
+      );
+    }
+    return null;
+  }
 }
 
 function normalizeRecord(jobId, input = {}) {
@@ -161,36 +136,53 @@ function normalizeRecord(jobId, input = {}) {
 
 async function writeRecord(jobId, record) {
   const normalized = normalizeRecord(jobId, record);
-  const key = jobKey(jobId);
-  const store = await getBlobStore();
+  const path = jobPath(jobId);
+  const client = getSupabaseClient();
 
-  if (store) {
-    await store.set(key, JSON.stringify(normalized));
+  if (client) {
+    try {
+      const { error } = await client.storage
+        .from(BUCKET_NAME)
+        .upload(path, JSON.stringify(normalized), {
+          contentType: 'application/json',
+          upsert: true
+        });
+      if (error) {
+        console.warn('[jobStore] Supabase Storage write failed:', sanitizeText(error.message, 'unknown'));
+      }
+    } catch (err) {
+      console.warn('[jobStore] Supabase Storage write threw:', sanitizeText(err && err.message, 'unknown'));
+    }
   }
 
-  memoryStore.set(key, normalized);
+  memoryStore.set(path, normalized);
   return normalized;
 }
 
 async function deleteRecord(jobId) {
-  const key = jobKey(jobId);
-  const store = await getBlobStore();
-  if (store) {
-    await store.delete(key);
+  const path = jobPath(jobId);
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      await client.storage.from(BUCKET_NAME).remove([path]);
+    } catch {
+      // best-effort delete
+    }
   }
-  memoryStore.delete(key);
+  memoryStore.delete(path);
 }
 
 async function readRecord(jobId) {
-  const key = jobKey(jobId);
-  const store = await getBlobStore();
+  const path = jobPath(jobId);
+  const client = getSupabaseClient();
   let parsed = null;
 
-  if (store) {
+  if (client) {
     try {
-      const raw = await store.get(key);
-      if (raw) {
-        parsed = JSON.parse(toRawText(raw));
+      const { data, error } = await client.storage.from(BUCKET_NAME).download(path);
+      if (!error && data) {
+        const text = await data.text();
+        parsed = JSON.parse(text);
       }
     } catch {
       parsed = null;
@@ -198,7 +190,7 @@ async function readRecord(jobId) {
   }
 
   if (!parsed) {
-    parsed = memoryStore.get(key) || null;
+    parsed = memoryStore.get(path) || null;
   }
   if (!parsed || typeof parsed !== 'object') {
     return null;
@@ -210,7 +202,7 @@ async function readRecord(jobId) {
     return null;
   }
 
-  memoryStore.set(key, normalized);
+  memoryStore.set(path, normalized);
   return normalized;
 }
 
