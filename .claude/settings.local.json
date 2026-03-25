@@ -5,7 +5,9 @@
       "Bash(find /c/Users/info/OneDrive/Documents/SoWhatAI/SoWhatAI/SoWhatAI/src -type f -name *.ts -o -name *.tsx -o -name *.js -o -name *.jsx)",
       "Bash(grep -r stripe /c/Users/info/OneDrive/Documents/SoWhatAI/SoWhatAI --include=*.js --include=*.jsx --include=*.ts --include=*.tsx)",
       "Bash(grep -r supabase /c/Users/info/OneDrive/Documents/SoWhatAI/SoWhatAI/SoWhatAI/netlify/functions --include=*.js)",
-      "Bash(find /c/Users/info/OneDrive/Documents/SoWhatAI/SoWhatAI -name *migration* -o -name *schema* -o -name *db*)"
+      "Bash(find /c/Users/info/OneDrive/Documents/SoWhatAI/SoWhatAI -name *migration* -o -name *schema* -o -name *db*)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)"
     ]
   }
 }
