@@ -98,12 +98,14 @@ function getSupabaseClient() {
     const url = process.env.SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !serviceKey) {
+      console.warn('[jobStore] Missing env vars. SUPABASE_URL present:', !!url, '| SUPABASE_SERVICE_ROLE_KEY present:', !!serviceKey);
       throw new Error('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set.');
     }
     const { createClient } = require('@supabase/supabase-js');
     supabaseClient = createClient(url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false }
     });
+    console.log('[jobStore] Supabase client initialised. URL:', url.slice(0, 40));
     return supabaseClient;
   } catch (error) {
     if (!fallbackWarningShown) {
@@ -148,7 +150,7 @@ async function writeRecord(jobId, record) {
           upsert: true
         });
       if (error) {
-        console.warn('[jobStore] Supabase Storage write failed:', sanitizeText(error.message, 'unknown'));
+        console.error('[jobStore] writeRecord upload error:', JSON.stringify(error));
       }
     } catch (err) {
       console.warn('[jobStore] Supabase Storage write threw:', sanitizeText(err && err.message, 'unknown'));
@@ -180,6 +182,7 @@ async function readRecord(jobId) {
   if (client) {
     try {
       const { data, error } = await client.storage.from(BUCKET_NAME).download(path);
+      console.log('[jobStore] readRecord download result — error:', error ? JSON.stringify(error) : 'none', '| data present:', !!data);
       if (!error && data) {
         const text = await data.text();
         parsed = JSON.parse(text);
