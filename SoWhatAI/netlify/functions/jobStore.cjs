@@ -90,22 +90,26 @@ function jobPath(jobId) {
   return `${JOB_PATH_PREFIX}${jobId}.json`;
 }
 
+// The Supabase project URL is hardcoded to match supabaseClient.js (the frontend client).
+// The service role key must come from env vars — unlike the anon key used in supabaseClient.js,
+// it bypasses Row Level Security and must never be committed to source code.
+const SUPABASE_URL = 'https://wopdpporlylygxyvpene.supabase.co';
+
 function getSupabaseClient() {
   if (supabaseClient) return supabaseClient;
   if (supabaseInitAttempted) return null;
   supabaseInitAttempted = true;
   try {
-    const url = process.env.SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !serviceKey) {
-      console.warn('[jobStore] Missing env vars. SUPABASE_URL present:', !!url, '| SUPABASE_SERVICE_ROLE_KEY present:', !!serviceKey);
-      throw new Error('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set.');
+    if (!serviceKey) {
+      console.warn('[jobStore] Missing env var: SUPABASE_SERVICE_ROLE_KEY not set.');
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY not set.');
     }
     const { createClient } = require('@supabase/supabase-js');
-    supabaseClient = createClient(url, serviceKey, {
+    supabaseClient = createClient(SUPABASE_URL, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false }
     });
-    console.log('[jobStore] Supabase client initialised. URL:', url.slice(0, 40));
+    console.log('[jobStore] Supabase client initialised. URL:', SUPABASE_URL);
     return supabaseClient;
   } catch (error) {
     if (!fallbackWarningShown) {
