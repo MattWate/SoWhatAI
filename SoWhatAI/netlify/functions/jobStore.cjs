@@ -109,7 +109,6 @@ function getSupabaseClient() {
     supabaseClient = createClient(SUPABASE_URL, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false }
     });
-    console.log('[jobStore] Supabase client initialised. URL:', SUPABASE_URL);
     return supabaseClient;
   } catch (error) {
     if (!fallbackWarningShown) {
@@ -154,7 +153,7 @@ async function writeRecord(jobId, record) {
           upsert: true
         });
       if (error) {
-        console.error('[jobStore] writeRecord upload error:', JSON.stringify(error));
+        console.warn('[jobStore] Supabase Storage write failed:', sanitizeText(error.message, 'unknown'));
       }
     } catch (err) {
       console.warn('[jobStore] Supabase Storage write threw:', sanitizeText(err && err.message, 'unknown'));
@@ -186,7 +185,6 @@ async function readRecord(jobId) {
   if (client) {
     try {
       const { data, error } = await client.storage.from(BUCKET_NAME).download(path);
-      console.log('[jobStore] readRecord download result — error:', error ? JSON.stringify(error) : 'none', '| data present:', !!data);
       if (!error && data) {
         const text = await data.text();
         parsed = JSON.parse(text);

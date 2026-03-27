@@ -96,12 +96,10 @@ function normalizePayload(input) {
 
 async function triggerBackground(jobId, event, onFailure) {
   const fetchImpl = global.fetch;
-  console.log('[wcag-start] global.fetch available:', typeof fetchImpl === 'function');
   if (typeof fetchImpl !== 'function') return;
 
   const origin = resolveRequestOrigin(event);
   const url = origin ? new URL(BACKGROUND_PATH, origin).toString() : null;
-  console.log('[wcag-start] triggering background at URL:', url);
   if (!url) {
     console.warn('[wcag-start] could not resolve origin, background trigger skipped.');
     if (typeof onFailure === 'function') await onFailure().catch(() => {});
