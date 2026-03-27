@@ -392,6 +392,52 @@ async function maybeFetchPsiSummary(payload, event, jobId) {
   }
 }
 
+function reshapeFlatIssuesToGrouped(flatIssues) {
+  if (!Array.isArray(flatIssues) || flatIssues.length === 0) return [];
+
+  const ruleMap = new Map();
+
+  for (const issue of flatIssues) {
+    const ruleId = String(issue.ruleId || '').trim();
+    if (!ruleId) continue;
+
+    const nodeObj = {
+      selector: (Array.isArray(issue.targetSelectors) && issue.targetSelectors[0]) || 'n/a',
+      html: String(issue.htmlSnippet || ''),
+      pageUrl: String(issue.pageUrl || '')
+    };
+
+    if (!ruleMap.has(ruleId)) {
+      const description = sanitizeText(issue.failureSummary, 'No description available.');
+      ruleMap.set(ruleId, {
+        id: ruleId,
+        description,
+        help: description,
+        helpUrl: `https://dequeuniversity.com/rules/axe/4.9/${ruleId}?application=axeAPI`,
+        impact: String(issue.impact || 'minor'),
+        wcagRefs: Array.isArray(issue.wcagRefs) ? issue.wcagRefs : [],
+        nodeCount: 0,
+        nodes: [],
+        firstNode: nodeObj
+      });
+    }
+
+    const group = ruleMap.get(ruleId);
+    group.nodes.push(nodeObj);
+    group.nodeCount += 1;
+  }
+
+  return Array.from(ruleMap.values());
+}
+
+function reshapeNeedsReview(needsReview) {
+  if (!Array.isArray(needsReview)) return [];
+  return needsReview.map((item) => ({
+    ...item,
+    description: sanitizeText(item.reason || item.description, 'Manual review recommended.')
+  }));
+}
+
 function startProgressHeartbeat(jobId) {
   let percent = 44;
   const timer = setInterval(() => {
@@ -463,6 +509,9 @@ async function runScanJob(jobId, payload, event) {
     accessibility,
     psiResult
   });
+
+  finalResult.issues = reshapeFlatIssuesToGrouped(finalResult.issues);
+  finalResult.needsReview = reshapeNeedsReview(finalResult.needsReview);
 
   await completeJob(jobId, finalResult);
 }
