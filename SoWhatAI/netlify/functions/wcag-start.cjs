@@ -61,12 +61,12 @@ function resolveRequestOrigin(event) {
   const host = forwardedHost || getHeader(headers, 'host');
   const proto = getHeader(headers, 'x-forwarded-proto') || 'https';
   if (host) return `${proto}://${host}`;
-
   const origin = getHeader(headers, 'origin');
   if (origin) {
     return origin.replace(/\/+$/, '');
   }
-  return '';
+  const fromEnv = process.env.URL || process.env.DEPLOY_PRIME_URL || process.env.DEPLOY_URL || '';
+  return fromEnv.replace(/\/+$/, '');
 }
 
 function buildJobId() {
@@ -94,32 +94,28 @@ function normalizePayload(input) {
   };
 }
 
-function triggerBackground(jobId, event, onFailure) {
+async function triggerBackground(jobId, event, onFailure) {
   const fetchImpl = global.fetch;
   console.log('[wcag-start] global.fetch available:', typeof fetchImpl === 'function');
   if (typeof fetchImpl !== 'function') return;
 
   const origin = resolveRequestOrigin(event);
-  const url = origin ? new URL(BACKGROUND_PATH, origin).toString() : BACKGROUND_PATH;
+  const url = origin ? new URL(BACKGROUND_PATH, origin).toString() : null;
   console.log('[wcag-start] triggering background at URL:', url);
+  if (!url) {
+    console.warn('[wcag-start] could not resolve origin, background trigger skipped.');
+    if (typeof onFailure === 'function') await onFailure().catch(() => {});
+    return;
+  }
   try {
-    Promise.resolve(
-      fetchImpl(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId })
-      })
-    ).catch((error) => {
-      console.warn('[wcag-start] background trigger failed', sanitizeText(error && error.message, 'Unknown error.'));
-      if (typeof onFailure === 'function') {
-        onFailure().catch(() => {});
-      }
+    await fetchImpl(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId })
     });
   } catch (error) {
     console.warn('[wcag-start] background trigger failed', sanitizeText(error && error.message, 'Unknown error.'));
-    if (typeof onFailure === 'function') {
-      onFailure().catch(() => {});
-    }
+    if (typeof onFailure === 'function') await onFailure().catch(() => {});
   }
 }
 
@@ -166,7 +162,7 @@ async function handler(event, context) {
     });
   }
 
-  triggerBackground(jobId, event, async () => {
+  await triggerBackground(jobId, event, async () => {
     if (typeof failJob === 'function') {
       await failJob(jobId, {
         code: 'background_trigger_failed',
