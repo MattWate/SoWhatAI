@@ -66,7 +66,9 @@ function getFirstNode(issue) {
 
   return {
     selector,
-    snippet
+    snippet,
+    pageUrl: source.pageUrl || null,
+    bbox: source.bbox || null
   };
 }
 
@@ -177,6 +179,7 @@ export default function WcagScanPanel() {
   const [result, setResult] = useState(null);
   const [copyMessage, setCopyMessage] = useState('');
   const [expandedIssues, setExpandedIssues] = useState(new Set());
+  const [nodeIndices, setNodeIndices] = useState({});
 
   const urlError = useMemo(() => {
     const value = String(startUrl || '').trim();
@@ -531,7 +534,6 @@ export default function WcagScanPanel() {
                     {impactIssues.length ? (
                       <div className="space-y-3">
                         {impactIssues.map((issue, index) => {
-                          const firstNode = getFirstNode(issue);
                           const issueId = sanitizeText(issue && issue.id, 'unknown_rule');
                           const description = sanitizeText(
                             issue && issue.description,
@@ -542,6 +544,19 @@ export default function WcagScanPanel() {
 
                           const issueKey = `${issueId}-${index}`;
                           const isExpanded = expandedIssues.has(issueKey);
+
+                          const allNodes = Array.isArray(issue && issue.nodes) && issue.nodes.length > 0
+                            ? issue.nodes
+                            : [getFirstNode(issue)];
+                          const totalNodes = allNodes.length;
+                          const currentIdx = nodeIndices[issueKey] || 0;
+                          const rawNode = allNodes[Math.min(currentIdx, totalNodes - 1)] || {};
+                          const firstNode = {
+                            selector: sanitizeText(rawNode.selector || (Array.isArray(rawNode.target) ? rawNode.target[0] : ''), 'n/a'),
+                            snippet: truncateText(rawNode.snippet || rawNode.html || '', 220) || 'n/a',
+                            pageUrl: rawNode.pageUrl || null,
+                            bbox: rawNode.bbox || null,
+                          };
                           return (
                             <div key={issueKey} className="rounded border border-gray-700 bg-gray-950/40">
                               <button
@@ -563,6 +578,23 @@ export default function WcagScanPanel() {
                               </button>
                               {isExpanded && (
                                 <div className="px-3 pb-3 space-y-2 border-t border-gray-700/60 pt-2">
+                                  {totalNodes > 1 && (
+                                    <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => setNodeIndices(prev => ({ ...prev, [issueKey]: Math.max(0, currentIdx - 1) }))}
+                                        disabled={currentIdx === 0}
+                                        className="px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40"
+                                      >‹</button>
+                                      <span>Node {currentIdx + 1} of {totalNodes}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setNodeIndices(prev => ({ ...prev, [issueKey]: Math.min(totalNodes - 1, currentIdx + 1) }))}
+                                        disabled={currentIdx === totalNodes - 1}
+                                        className="px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40"
+                                      >›</button>
+                                    </div>
+                                  )}
                                   <p className="text-xs text-gray-400">Help: {help}</p>
                                   <p className="text-xs text-gray-400 break-all">Selector: {firstNode.selector}</p>
                                   <p className="text-xs text-gray-500 font-mono break-all">Snippet: {firstNode.snippet}</p>
@@ -580,6 +612,9 @@ export default function WcagScanPanel() {
                                     screenshot={getScreenshotForNode(Array.isArray(result && result.screenshots) ? result.screenshots : [], firstNode)}
                                     bbox={firstNode.bbox}
                                   />
+                                  <p className="text-xs text-yellow-400 mt-1">
+                                    Debug — pageUrl: {firstNode.pageUrl || '(none)'} | screenshot: {getScreenshotForNode(Array.isArray(result && result.screenshots) ? result.screenshots : [], firstNode) ? 'FOUND' : 'NOT FOUND'} | bbox: {firstNode.bbox ? JSON.stringify(firstNode.bbox) : '(none)'}
+                                  </p>
                                 </div>
                               )}
                             </div>
