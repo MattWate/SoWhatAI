@@ -70,6 +70,11 @@ function getFirstNode(issue) {
   };
 }
 
+function getScreenshotForNode(screenshots, node) {
+  if (!Array.isArray(screenshots) || !node || !node.pageUrl) return null;
+  return screenshots.find((s) => s && s.pageUrl === node.pageUrl) || null;
+}
+
 function groupIssuesByImpact(issues) {
   const groups = {
     critical: [],
@@ -105,6 +110,34 @@ function ImpactBadge({ impact }) {
     <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold capitalize ${IMPACT_COLORS[key]}`}>
       {key}
     </span>
+  );
+}
+
+function ScreenshotWithHighlight({ screenshot, bbox }) {
+  if (!screenshot || !screenshot.dataUrl) return null;
+  return (
+    <div className="relative inline-block max-w-full mt-2">
+      <img
+        src={screenshot.dataUrl}
+        alt="Page screenshot"
+        className="w-full rounded border border-gray-700"
+      />
+      {bbox && Number.isFinite(bbox.x) && Number.isFinite(bbox.y) &&
+       Number.isFinite(bbox.width) && Number.isFinite(bbox.height) && (
+        <div
+          style={{
+            position: 'absolute',
+            left: `${bbox.x}px`,
+            top: `${bbox.y}px`,
+            width: `${bbox.width}px`,
+            height: `${bbox.height}px`,
+            backgroundColor: 'rgba(220, 38, 38, 0.25)',
+            border: '2px solid rgb(220, 38, 38)',
+            pointerEvents: 'none'
+          }}
+        />
+      )}
+    </div>
   );
 }
 
@@ -543,6 +576,10 @@ export default function WcagScanPanel() {
                                       axe rule docs ↗
                                     </a>
                                   ) : null}
+                                  <ScreenshotWithHighlight
+                                    screenshot={getScreenshotForNode(Array.isArray(result && result.screenshots) ? result.screenshots : [], firstNode)}
+                                    bbox={firstNode.bbox}
+                                  />
                                 </div>
                               )}
                             </div>

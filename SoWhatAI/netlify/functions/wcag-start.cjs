@@ -83,7 +83,7 @@ function normalizePayload(input) {
   const maxPages = mode === 'crawl' ? clamp(requestedMaxPages || 1, 1, 10) : 1;
   const requestedTimeout = normalizeInteger(input.timeoutMs, MAX_TIMEOUT_MS);
   const timeoutMs = clamp(requestedTimeout || MAX_TIMEOUT_MS, MIN_TIMEOUT_MS, MAX_TIMEOUT_MS);
-  const includeScreenshots = Boolean(input.includeScreenshots);
+  const includeScreenshots = true;
 
   return {
     startUrl,

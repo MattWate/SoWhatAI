@@ -414,7 +414,8 @@ function reshapeFlatIssuesToGrouped(flatIssues) {
     const nodeObj = {
       selector: (Array.isArray(issue.targetSelectors) && issue.targetSelectors[0]) || 'n/a',
       html: String(issue.htmlSnippet || ''),
-      pageUrl: String(issue.pageUrl || '')
+      pageUrl: String(issue.pageUrl || ''),
+      bbox: issue.bbox || null
     };
 
     if (!ruleMap.has(ruleId)) {
