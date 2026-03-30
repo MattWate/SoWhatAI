@@ -395,6 +395,16 @@ async function maybeFetchPsiSummary(payload, event, jobId) {
 function reshapeFlatIssuesToGrouped(flatIssues) {
   if (!Array.isArray(flatIssues) || flatIssues.length === 0) return [];
 
+  let axeRuleLookup = {};
+  try {
+    const axe = require('axe-core');
+    for (const rule of axe.getRules()) {
+      axeRuleLookup[rule.ruleId] = rule;
+    }
+  } catch {
+    // axe-core unavailable at runtime — fall back to failureSummary
+  }
+
   const ruleMap = new Map();
 
   for (const issue of flatIssues) {
@@ -408,12 +418,13 @@ function reshapeFlatIssuesToGrouped(flatIssues) {
     };
 
     if (!ruleMap.has(ruleId)) {
-      const description = sanitizeText(issue.failureSummary, 'No description available.');
+      const axeRule = axeRuleLookup[ruleId];
+      const fallback = sanitizeText(issue.failureSummary, 'No description available.');
       ruleMap.set(ruleId, {
         id: ruleId,
-        description,
-        help: description,
-        helpUrl: `https://dequeuniversity.com/rules/axe/4.9/${ruleId}?application=axeAPI`,
+        description: axeRule ? axeRule.description : fallback,
+        help: axeRule ? axeRule.help : fallback,
+        helpUrl: axeRule ? axeRule.helpUrl : `https://dequeuniversity.com/rules/axe/4.9/${ruleId}?application=axeAPI`,
         impact: String(issue.impact || 'minor'),
         wcagRefs: Array.isArray(issue.wcagRefs) ? issue.wcagRefs : [],
         nodeCount: 0,
