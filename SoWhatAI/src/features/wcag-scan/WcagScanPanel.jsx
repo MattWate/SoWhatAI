@@ -143,6 +143,132 @@ function ScreenshotWithHighlight({ screenshot, bbox }) {
   );
 }
 
+function IssuePreview({ pageUrl, selector, screenshot, bbox }) {
+  const iframeRef = useRef(null);
+  const containerRef = useRef(null);
+  const timerRef = useRef(null);
+  const [status, setStatus] = useState('loading');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!pageUrl) return;
+    setStatus('loading');
+
+    const container = containerRef.current;
+    if (!container) return;
+
+    let started = false;
+    function startTimer() {
+      if (started) return;
+      started = true;
+      timerRef.current = setTimeout(() => {
+        setStatus(prev => (prev === 'loading' ? 'blocked' : prev));
+      }, 3000);
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) {
+        startTimer();
+        observer.disconnect();
+      }
+    }, { threshold: 0.1 });
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+      clearTimeout(timerRef.current);
+    };
+  }, [pageUrl]);
+
+  function handleLoad() {
+    clearTimeout(timerRef.current);
+    try {
+      const doc = iframeRef.current?.contentDocument;
+      if (doc && doc.body && doc.body.innerHTML.trim() === '') {
+        setStatus('blocked');
+        return;
+      }
+    } catch {
+      // SecurityError = cross-origin and loaded successfully
+    }
+    setStatus('loaded');
+  }
+
+  function handleError() {
+    clearTimeout(timerRef.current);
+    setStatus('blocked');
+  }
+
+  function copySelector() {
+    if (!selector || selector === 'n/a') return;
+    navigator.clipboard.writeText(selector).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  }
+
+  if (!pageUrl) return null;
+
+  const isBlocked = status === 'blocked';
+  const isLoading = status === 'loading';
+
+  return (
+    <div ref={containerRef} className="mt-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 text-xs text-gray-400">
+          {isBlocked ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-yellow-500 inline-block" />
+              <span>Screenshot (site blocks preview)</span>
+            </>
+          ) : (
+            <>
+              <span className={`w-2 h-2 rounded-full inline-block ${isLoading ? 'bg-gray-500 animate-pulse' : 'bg-[#13BBAF]'}`} />
+              <span>{isLoading ? 'Loading preview…' : 'Live preview'}</span>
+            </>
+          )}
+        </div>
+        {selector && selector !== 'n/a' && (
+          <button
+            type="button"
+            onClick={copySelector}
+            className="text-xs text-[#13BBAF] hover:underline"
+          >
+            {copied ? 'Copied!' : 'Copy selector'}
+          </button>
+        )}
+      </div>
+
+      {selector && selector !== 'n/a' && (
+        <p className="text-xs font-mono text-gray-300 bg-gray-800 rounded px-2 py-1 break-all">
+          {selector}
+        </p>
+      )}
+
+      {isBlocked ? (
+        <ScreenshotWithHighlight screenshot={screenshot} bbox={bbox} />
+      ) : (
+        <div className="relative w-full rounded border border-gray-700 overflow-hidden" style={{ height: '600px' }}>
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80 z-10">
+              <div className="w-6 h-6 border-2 border-[#13BBAF] border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+          <iframe
+            ref={iframeRef}
+            src={pageUrl}
+            title="Live page preview"
+            onLoad={handleLoad}
+            onError={handleError}
+            className="w-full h-full border-0"
+            sandbox="allow-scripts allow-forms"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 async function copyToClipboard(text) {
   if (!text) return;
 
@@ -596,7 +722,6 @@ export default function WcagScanPanel() {
                                     </div>
                                   )}
                                   <p className="text-xs text-gray-400">Help: {help}</p>
-                                  <p className="text-xs text-gray-400 break-all">Selector: {firstNode.selector}</p>
                                   <p className="text-xs text-gray-500 font-mono break-all">Snippet: {firstNode.snippet}</p>
                                   {sanitizeText(issue && issue.helpUrl) ? (
                                     <a
@@ -608,13 +733,12 @@ export default function WcagScanPanel() {
                                       axe rule docs ↗
                                     </a>
                                   ) : null}
-                                  <ScreenshotWithHighlight
+                                  <IssuePreview
+                                    pageUrl={firstNode.pageUrl}
+                                    selector={firstNode.selector}
                                     screenshot={getScreenshotForNode(Array.isArray(result && result.screenshots) ? result.screenshots : [], firstNode)}
                                     bbox={firstNode.bbox}
                                   />
-                                  <p className="text-xs text-yellow-400 mt-1">
-                                    Debug — pageUrl: {firstNode.pageUrl || '(none)'} | screenshot: {getScreenshotForNode(Array.isArray(result && result.screenshots) ? result.screenshots : [], firstNode) ? 'FOUND' : 'NOT FOUND'} | bbox: {firstNode.bbox ? JSON.stringify(firstNode.bbox) : '(none)'}
-                                  </p>
                                 </div>
                               )}
                             </div>
