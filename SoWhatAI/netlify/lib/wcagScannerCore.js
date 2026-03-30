@@ -743,7 +743,7 @@ async function captureScreenshotForPage(context, pageUrl, timeBudget) {
     const screenshot = await page.screenshot({
       fullPage: true,
       type: 'jpeg',
-      quality: 45
+      quality: 75
     });
 
     if (screenshot.length > MAX_SCREENSHOT_BYTES_PER_IMAGE) {

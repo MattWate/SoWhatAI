@@ -115,89 +115,66 @@ function ImpactBadge({ impact }) {
   );
 }
 
-function ScreenshotWithHighlight({ screenshot, bbox }) {
-  if (!screenshot || !screenshot.dataUrl) return null;
-  return (
-    <div className="relative inline-block max-w-full mt-2">
-      <img
-        src={screenshot.dataUrl}
-        alt="Page screenshot"
-        className="w-full rounded border border-gray-700"
-      />
-      {bbox && Number.isFinite(bbox.x) && Number.isFinite(bbox.y) &&
-       Number.isFinite(bbox.width) && Number.isFinite(bbox.height) && (
-        <div
-          style={{
-            position: 'absolute',
-            left: `${bbox.x}px`,
-            top: `${bbox.y}px`,
-            width: `${bbox.width}px`,
-            height: `${bbox.height}px`,
-            backgroundColor: 'rgba(220, 38, 38, 0.25)',
-            border: '2px solid rgb(220, 38, 38)',
-            pointerEvents: 'none'
-          }}
-        />
-      )}
-    </div>
-  );
-}
+const SCANNER_VIEWPORT_WIDTH = 1366;
 
-function IssuePreview({ pageUrl, selector, screenshot, bbox }) {
-  const iframeRef = useRef(null);
-  const containerRef = useRef(null);
-  const timerRef = useRef(null);
-  const [status, setStatus] = useState('loading');
+function ElementScreenshot({ screenshot, bbox, selector }) {
+  const canvasRef = useRef(null);
   const [copied, setCopied] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!pageUrl) return;
-    setStatus('loading');
+    setReady(false);
+    if (!screenshot || !screenshot.dataUrl) return;
 
-    const container = containerRef.current;
-    if (!container) return;
+    const img = new Image();
+    img.onload = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-    let started = false;
-    function startTimer() {
-      if (started) return;
-      started = true;
-      timerRef.current = setTimeout(() => {
-        setStatus(prev => (prev === 'loading' ? 'blocked' : prev));
-      }, 3000);
-    }
+      const scale = img.naturalWidth / SCANNER_VIEWPORT_WIDTH;
+      const hasBbox = bbox &&
+        Number.isFinite(bbox.x) && Number.isFinite(bbox.y) &&
+        Number.isFinite(bbox.width) && Number.isFinite(bbox.height);
 
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0]?.isIntersecting) {
-        startTimer();
-        observer.disconnect();
+      let srcX, srcY, srcW, srcH;
+      if (hasBbox) {
+        const pad = 60 * scale;
+        srcX = Math.max(0, bbox.x * scale - pad);
+        srcY = Math.max(0, bbox.y * scale - pad);
+        srcW = Math.min(img.naturalWidth - srcX, bbox.width * scale + pad * 2);
+        srcH = Math.min(img.naturalHeight - srcY, bbox.height * scale + pad * 2);
+      } else {
+        srcX = 0;
+        srcY = 0;
+        srcW = img.naturalWidth;
+        srcH = img.naturalHeight;
       }
-    }, { threshold: 0.1 });
-    observer.observe(container);
 
-    return () => {
-      observer.disconnect();
-      clearTimeout(timerRef.current);
+      const displayW = Math.min(800, srcW);
+      const displayH = (srcH / srcW) * displayW;
+      canvas.width = displayW;
+      canvas.height = displayH;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, displayW, displayH);
+
+      if (hasBbox) {
+        const dScale = displayW / srcW;
+        const rx = (bbox.x * scale - srcX) * dScale;
+        const ry = (bbox.y * scale - srcY) * dScale;
+        const rw = bbox.width * scale * dScale;
+        const rh = bbox.height * scale * dScale;
+        ctx.fillStyle = 'rgba(220, 38, 38, 0.15)';
+        ctx.fillRect(rx, ry, rw, rh);
+        ctx.strokeStyle = 'rgb(220, 38, 38)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(rx, ry, rw, rh);
+      }
+
+      setReady(true);
     };
-  }, [pageUrl]);
-
-  function handleLoad() {
-    clearTimeout(timerRef.current);
-    try {
-      const doc = iframeRef.current?.contentDocument;
-      if (doc && doc.body && doc.body.innerHTML.trim() === '') {
-        setStatus('blocked');
-        return;
-      }
-    } catch {
-      // SecurityError = cross-origin and loaded successfully
-    }
-    setStatus('loaded');
-  }
-
-  function handleError() {
-    clearTimeout(timerRef.current);
-    setStatus('blocked');
-  }
+    img.src = screenshot.dataUrl;
+  }, [screenshot, bbox]);
 
   function copySelector() {
     if (!selector || selector === 'n/a') return;
@@ -207,27 +184,12 @@ function IssuePreview({ pageUrl, selector, screenshot, bbox }) {
     }).catch(() => {});
   }
 
-  if (!pageUrl) return null;
-
-  const isBlocked = status === 'blocked';
-  const isLoading = status === 'loading';
+  if (!screenshot || !screenshot.dataUrl) return null;
 
   return (
-    <div ref={containerRef} className="mt-3 space-y-2">
+    <div className="mt-3 space-y-2">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-xs text-gray-400">
-          {isBlocked ? (
-            <>
-              <span className="w-2 h-2 rounded-full bg-yellow-500 inline-block" />
-              <span>Screenshot (site blocks preview)</span>
-            </>
-          ) : (
-            <>
-              <span className={`w-2 h-2 rounded-full inline-block ${isLoading ? 'bg-gray-500 animate-pulse' : 'bg-[#13BBAF]'}`} />
-              <span>{isLoading ? 'Loading preview…' : 'Live preview'}</span>
-            </>
-          )}
-        </div>
+        <span className="text-xs text-gray-400">Element screenshot</span>
         {selector && selector !== 'n/a' && (
           <button
             type="button"
@@ -238,31 +200,18 @@ function IssuePreview({ pageUrl, selector, screenshot, bbox }) {
           </button>
         )}
       </div>
-
       {selector && selector !== 'n/a' && (
         <p className="text-xs font-mono text-gray-300 bg-gray-800 rounded px-2 py-1 break-all">
           {selector}
         </p>
       )}
-
-      {isBlocked ? (
-        <ScreenshotWithHighlight screenshot={screenshot} bbox={bbox} />
-      ) : (
-        <div className="relative w-full rounded border border-gray-700 overflow-hidden" style={{ height: '600px' }}>
-          {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80 z-10">
-              <div className="w-6 h-6 border-2 border-[#13BBAF] border-t-transparent rounded-full animate-spin" />
-            </div>
-          )}
-          <iframe
-            ref={iframeRef}
-            src={pageUrl}
-            title="Live page preview"
-            onLoad={handleLoad}
-            onError={handleError}
-            className="w-full h-full border-0"
-            sandbox="allow-scripts allow-forms"
-          />
+      <canvas
+        ref={canvasRef}
+        className={`w-full rounded border border-gray-700 ${ready ? '' : 'hidden'}`}
+      />
+      {!ready && (
+        <div className="w-full h-24 rounded border border-gray-700 flex items-center justify-center bg-gray-900/60">
+          <div className="w-5 h-5 border-2 border-[#13BBAF] border-t-transparent rounded-full animate-spin" />
         </div>
       )}
     </div>
@@ -733,11 +682,10 @@ export default function WcagScanPanel() {
                                       axe rule docs ↗
                                     </a>
                                   ) : null}
-                                  <IssuePreview
-                                    pageUrl={firstNode.pageUrl}
-                                    selector={firstNode.selector}
+                                  <ElementScreenshot
                                     screenshot={getScreenshotForNode(Array.isArray(result && result.screenshots) ? result.screenshots : [], firstNode)}
                                     bbox={firstNode.bbox}
+                                    selector={firstNode.selector}
                                   />
                                 </div>
                               )}
