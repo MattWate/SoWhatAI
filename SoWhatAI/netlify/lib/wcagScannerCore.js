@@ -18,7 +18,7 @@ const MAX_NODES_PER_VIOLATION = 80;
 const MAX_TOTAL_ISSUES_OVERALL = 1000;
 
 const MAX_SCREENSHOTS = 3;
-const MAX_SCREENSHOT_BYTES_PER_IMAGE = 600 * 1024;
+const MAX_SCREENSHOT_BYTES_PER_IMAGE = 2 * 1024 * 1024;
 const MAX_HTML_SNIPPET_LENGTH = 600;
 const MAX_FAILURE_SUMMARY_LENGTH = 500;
 const MAX_SELECTOR_COUNT = 6;
@@ -838,7 +838,8 @@ async function scanPage({
   caps,
   timeBudget,
   pageScanBudgetMs,
-  includePerformanceAudit
+  includePerformanceAudit,
+  includeScreenshots
 }) {
   const pageStartedAt = Date.now();
   let page = null;
@@ -933,6 +934,22 @@ async function scanPage({
       const discoveredLinks =
         mode === 'crawl' ? await collectLinks(page, pageUrl, startOrigin) : [];
 
+      let pageScreenshot = null;
+      if (includeScreenshots) {
+        try {
+          const buf = await page.screenshot({ fullPage: true, type: 'jpeg', quality: 75 });
+          if (buf.length <= MAX_SCREENSHOT_BYTES_PER_IMAGE) {
+            pageScreenshot = {
+              pageUrl,
+              dataUrl: `data:image/jpeg;base64,${buf.toString('base64')}`,
+              bytes: buf.length
+            };
+          }
+        } catch {
+          // screenshot failed, leave null
+        }
+      }
+
       return {
         status: 'ok',
         issues,
@@ -942,7 +959,8 @@ async function scanPage({
         performanceSummary: performanceAudit?.summary || summarizePerformanceIssues([]),
         discoveredLinks,
         pageTruncatedBy,
-        detectedViolationCount: violations.length
+        detectedViolationCount: violations.length,
+        pageScreenshot
       };
     };
 
@@ -971,6 +989,7 @@ async function scanPage({
       discoveredLinks: [],
       pageTruncatedBy: { violations: false, nodes: false, totalIssues: false },
       detectedViolationCount: 0,
+      pageScreenshot: null,
       error: error.message || String(error),
       durationMs: Date.now() - pageStartedAt,
       timings
@@ -1106,11 +1125,19 @@ async function runWcagScan(input) {
         caps: options.caps,
         timeBudget,
         pageScanBudgetMs: options.pageScanBudgetMs,
-        includePerformanceAudit: options.includePerformanceAudit
+        includePerformanceAudit: options.includePerformanceAudit,
+        includeScreenshots: options.includeScreenshots && screenshots.length < MAX_SCREENSHOTS
       });
 
       if (pageResult.status === 'ok') {
         pagesScanned += 1;
+      }
+
+      if (pageResult.pageScreenshot) {
+        screenshots.push({
+          pageUrl: pageResult.pageScreenshot.pageUrl,
+          dataUrl: pageResult.pageScreenshot.dataUrl
+        });
       }
 
       if (pageResult.status !== 'ok' && pageResult.error) {
@@ -1193,22 +1220,6 @@ async function runWcagScan(input) {
       }
     }
 
-    if (options.includeScreenshots && pagesSummary.length > 0) {
-      const targets = selectScreenshotTargets(startUrl, pagesSummary);
-      const screenshotErrors = [];
-      for (const target of targets) {
-        const shot = await captureScreenshotForPage(context, target, timeBudget);
-        if (shot.omitted) {
-          screenshotErrors.push(`${target}: ${shot.reason}`);
-          continue;
-        }
-        screenshots.push({
-          pageUrl: shot.pageUrl,
-          dataUrl: shot.dataUrl
-        });
-      }
-      globalErrors.push(...screenshotErrors);
-    }
   } catch (error) {
     runtimeErrorMessage = error?.message || String(error);
     runtimeHint = getRuntimeHint(runtimeErrorMessage);

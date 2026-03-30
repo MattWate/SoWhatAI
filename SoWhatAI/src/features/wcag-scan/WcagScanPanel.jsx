@@ -136,18 +136,25 @@ function ElementScreenshot({ screenshot, bbox, selector }) {
         Number.isFinite(bbox.x) && Number.isFinite(bbox.y) &&
         Number.isFinite(bbox.width) && Number.isFinite(bbox.height);
 
-      let srcX, srcY, srcW, srcH;
+      let srcX, srcY, srcW, srcH, drawOverlay = false;
       if (hasBbox) {
         const pad = 60 * scale;
-        srcX = Math.max(0, bbox.x * scale - pad);
-        srcY = Math.max(0, bbox.y * scale - pad);
-        srcW = Math.min(img.naturalWidth - srcX, bbox.width * scale + pad * 2);
-        srcH = Math.min(img.naturalHeight - srcY, bbox.height * scale + pad * 2);
+        const bx = bbox.x * scale;
+        const by = bbox.y * scale;
+        const bw = bbox.width * scale;
+        const bh = bbox.height * scale;
+        const cx = Math.max(0, bx - pad);
+        const cy = Math.max(0, by - pad);
+        const cw = Math.min(img.naturalWidth - cx, bw + pad * 2);
+        const ch = Math.min(img.naturalHeight - cy, bh + pad * 2);
+        if (cw > 0 && ch > 0 && cx < img.naturalWidth && cy < img.naturalHeight) {
+          srcX = cx; srcY = cy; srcW = cw; srcH = ch;
+          drawOverlay = true;
+        } else {
+          srcX = 0; srcY = 0; srcW = img.naturalWidth; srcH = img.naturalHeight;
+        }
       } else {
-        srcX = 0;
-        srcY = 0;
-        srcW = img.naturalWidth;
-        srcH = img.naturalHeight;
+        srcX = 0; srcY = 0; srcW = img.naturalWidth; srcH = img.naturalHeight;
       }
 
       const displayW = Math.min(800, srcW);
@@ -158,12 +165,16 @@ function ElementScreenshot({ screenshot, bbox, selector }) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, displayW, displayH);
 
-      if (hasBbox) {
+      if (drawOverlay) {
+        const bx = bbox.x * scale;
+        const by = bbox.y * scale;
+        const bw = bbox.width * scale;
+        const bh = bbox.height * scale;
         const dScale = displayW / srcW;
-        const rx = (bbox.x * scale - srcX) * dScale;
-        const ry = (bbox.y * scale - srcY) * dScale;
-        const rw = bbox.width * scale * dScale;
-        const rh = bbox.height * scale * dScale;
+        const rx = (bx - srcX) * dScale;
+        const ry = (by - srcY) * dScale;
+        const rw = bw * dScale;
+        const rh = bh * dScale;
         ctx.fillStyle = 'rgba(220, 38, 38, 0.15)';
         ctx.fillRect(rx, ry, rw, rh);
         ctx.strokeStyle = 'rgb(220, 38, 38)';
