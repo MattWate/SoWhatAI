@@ -449,11 +449,25 @@ async function resolveBbox(page, selectors) {
         if (!el) return null;
         const r = el.getBoundingClientRect();
         if (!r || r.width <= 0 || r.height <= 0) return null;
+        const parent = el.parentElement;
+        let parentBbox = null;
+        if (parent && parent !== document.body && parent !== document.documentElement) {
+          const pr = parent.getBoundingClientRect();
+          if (pr && pr.height > 0) {
+            parentBbox = {
+              x: Math.round(pr.x + window.scrollX),
+              y: Math.round(pr.y + window.scrollY),
+              width: Math.round(pr.width),
+              height: Math.round(pr.height)
+            };
+          }
+        }
         return {
           x: Math.round(r.x + window.scrollX),
           y: Math.round(r.y + window.scrollY),
           width: Math.round(r.width),
-          height: Math.round(r.height)
+          height: Math.round(r.height),
+          parentBbox
         };
       }, selector);
       if (!box || box.width <= 0 || box.height <= 0) continue;

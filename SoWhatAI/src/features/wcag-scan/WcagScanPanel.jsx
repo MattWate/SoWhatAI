@@ -116,75 +116,16 @@ function ImpactBadge({ impact }) {
 }
 
 function ElementScreenshot({ screenshot, bbox, selector }) {
-  const canvasRef = useRef(null);
+  const [imgDims, setImgDims] = useState(null);
   const [copied, setCopied] = useState(false);
-  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setReady(false);
+    setImgDims(null);
     if (!screenshot || !screenshot.dataUrl) return;
-
     const img = new Image();
-    img.onload = () => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const viewportWidth = screenshot.screenshotWidth || img.naturalWidth;
-      const scale = img.naturalWidth / viewportWidth;
-      const hasBbox = bbox &&
-        Number.isFinite(bbox.x) && Number.isFinite(bbox.y) &&
-        Number.isFinite(bbox.width) && Number.isFinite(bbox.height);
-
-      let srcX, srcY, srcW, srcH, drawOverlay = false;
-      if (hasBbox) {
-        const pad = 60 * scale;
-        const bx = bbox.x * scale;
-        const by = bbox.y * scale;
-        const bw = bbox.width * scale;
-        const bh = bbox.height * scale;
-        const cx = Math.max(0, bx - pad);
-        const cy = Math.max(0, by - pad);
-        const cw = Math.min(img.naturalWidth - cx, bw + pad * 2);
-        const ch = Math.min(img.naturalHeight - cy, bh + pad * 2);
-        if (cw > 0 && ch > 0 && cx < img.naturalWidth && cy < img.naturalHeight) {
-          srcX = cx; srcY = cy; srcW = cw; srcH = ch;
-          drawOverlay = true;
-        } else {
-          srcX = 0; srcY = 0; srcW = img.naturalWidth; srcH = img.naturalHeight;
-        }
-      } else {
-        srcX = 0; srcY = 0; srcW = img.naturalWidth; srcH = img.naturalHeight;
-      }
-
-      const displayW = Math.min(800, srcW);
-      const displayH = (srcH / srcW) * displayW;
-      canvas.width = displayW;
-      canvas.height = displayH;
-
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, displayW, displayH);
-
-      if (drawOverlay) {
-        const bx = bbox.x * scale;
-        const by = bbox.y * scale;
-        const bw = bbox.width * scale;
-        const bh = bbox.height * scale;
-        const dScale = displayW / srcW;
-        const rx = (bx - srcX) * dScale;
-        const ry = (by - srcY) * dScale;
-        const rw = bw * dScale;
-        const rh = bh * dScale;
-        ctx.fillStyle = 'rgba(220, 38, 38, 0.15)';
-        ctx.fillRect(rx, ry, rw, rh);
-        ctx.strokeStyle = 'rgb(220, 38, 38)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(rx, ry, rw, rh);
-      }
-
-      setReady(true);
-    };
+    img.onload = () => setImgDims({ w: img.naturalWidth, h: img.naturalHeight });
     img.src = screenshot.dataUrl;
-  }, [screenshot, bbox]);
+  }, [screenshot]);
 
   function copySelector() {
     if (!selector || selector === 'n/a') return;
@@ -195,6 +136,37 @@ function ElementScreenshot({ screenshot, bbox, selector }) {
   }
 
   if (!screenshot || !screenshot.dataUrl) return null;
+
+  const hasBbox = bbox &&
+    Number.isFinite(bbox.x) && Number.isFinite(bbox.y) &&
+    Number.isFinite(bbox.width) && Number.isFinite(bbox.height);
+
+  const imgW = imgDims ? imgDims.w : 0;
+  const imgH = imgDims ? imgDims.h : 0;
+
+  // Vertical crop: use parentBbox height if available, otherwise element + padding
+  let cropY = 0;
+  let cropH = imgH;
+  if (hasBbox && imgH > 0) {
+    const pb = bbox.parentBbox;
+    if (pb && Number.isFinite(pb.y) && Number.isFinite(pb.height) && pb.height > 0) {
+      cropY = Math.max(0, pb.y);
+      cropH = Math.min(imgH - cropY, pb.height);
+    } else {
+      const pad = 40;
+      cropY = Math.max(0, bbox.y - pad);
+      cropH = Math.min(imgH - cropY, bbox.height + pad * 2);
+    }
+    if (cropH <= 0) { cropY = 0; cropH = imgH; }
+  }
+
+  // All positioning is percentage-based — browser handles all scaling, no pixel math
+  const containerAspect = imgW > 0 ? (cropH / imgW) * 100 : 56;
+  const imgTopPct = imgH > 0 ? -(cropY / imgH) * 100 : 0;
+  const overlayLeft   = imgW > 0 && hasBbox ? (bbox.x / imgW) * 100 : 0;
+  const overlayTop    = cropH > 0 && hasBbox ? ((bbox.y - cropY) / cropH) * 100 : 0;
+  const overlayWidth  = imgW > 0 && hasBbox ? (bbox.width / imgW) * 100 : 0;
+  const overlayHeight = cropH > 0 && hasBbox ? (bbox.height / cropH) * 100 : 0;
 
   return (
     <div className="mt-3 space-y-2">
@@ -215,13 +187,41 @@ function ElementScreenshot({ screenshot, bbox, selector }) {
           {selector}
         </p>
       )}
-      <canvas
-        ref={canvasRef}
-        className={`w-full rounded border border-gray-700 ${ready ? '' : 'hidden'}`}
-      />
-      {!ready && (
+      {!imgDims ? (
         <div className="w-full h-24 rounded border border-gray-700 flex items-center justify-center bg-gray-900/60">
           <div className="w-5 h-5 border-2 border-[#13BBAF] border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : (
+        <div
+          className="relative w-full overflow-hidden rounded border border-gray-700"
+          style={{ paddingTop: `${containerAspect}%` }}
+        >
+          <img
+            src={screenshot.dataUrl}
+            alt="Page screenshot"
+            style={{
+              position: 'absolute',
+              top: `${imgTopPct}%`,
+              left: 0,
+              width: '100%',
+              height: 'auto',
+              display: 'block',
+            }}
+          />
+          {hasBbox && (
+            <div
+              style={{
+                position: 'absolute',
+                left: `${overlayLeft}%`,
+                top: `${overlayTop}%`,
+                width: `${overlayWidth}%`,
+                height: `${overlayHeight}%`,
+                border: '2px solid rgb(220, 38, 38)',
+                backgroundColor: 'rgba(220, 38, 38, 0.15)',
+                pointerEvents: 'none',
+              }}
+            />
+          )}
         </div>
       )}
     </div>
