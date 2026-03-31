@@ -444,16 +444,20 @@ async function resolveBbox(page, selectors) {
     const selector = selectors[i];
     if (!selector || typeof selector !== 'string') continue;
     try {
-      const loc = page.locator(selector).first();
-      if ((await loc.count()) < 1) continue;
-      const box = await loc.boundingBox();
+      const box = await page.evaluate((sel) => {
+        const el = document.querySelector(sel);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        if (!r || r.width <= 0 || r.height <= 0) return null;
+        return {
+          x: Math.round(r.x + window.scrollX),
+          y: Math.round(r.y + window.scrollY),
+          width: Math.round(r.width),
+          height: Math.round(r.height)
+        };
+      }, selector);
       if (!box || box.width <= 0 || box.height <= 0) continue;
-      return {
-        x: Math.round(box.x),
-        y: Math.round(box.y),
-        width: Math.round(box.width),
-        height: Math.round(box.height)
-      };
+      return box;
     } catch {
       continue;
     }
@@ -937,11 +941,13 @@ async function scanPage({
       let pageScreenshot = null;
       if (includeScreenshots) {
         try {
+          const viewportSize = page.viewportSize();
           const buf = await page.screenshot({ fullPage: true, type: 'jpeg', quality: 75 });
           if (buf.length <= MAX_SCREENSHOT_BYTES_PER_IMAGE) {
             pageScreenshot = {
               pageUrl,
               dataUrl: `data:image/jpeg;base64,${buf.toString('base64')}`,
+              screenshotWidth: viewportSize ? viewportSize.width : 1366,
               bytes: buf.length
             };
           }
@@ -1136,7 +1142,8 @@ async function runWcagScan(input) {
       if (pageResult.pageScreenshot) {
         screenshots.push({
           pageUrl: pageResult.pageScreenshot.pageUrl,
-          dataUrl: pageResult.pageScreenshot.dataUrl
+          dataUrl: pageResult.pageScreenshot.dataUrl,
+          screenshotWidth: pageResult.pageScreenshot.screenshotWidth
         });
       }
 

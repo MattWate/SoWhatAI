@@ -115,8 +115,6 @@ function ImpactBadge({ impact }) {
   );
 }
 
-const SCANNER_VIEWPORT_WIDTH = 1366;
-
 function ElementScreenshot({ screenshot, bbox, selector }) {
   const canvasRef = useRef(null);
   const [copied, setCopied] = useState(false);
@@ -131,7 +129,8 @@ function ElementScreenshot({ screenshot, bbox, selector }) {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      const scale = img.naturalWidth / SCANNER_VIEWPORT_WIDTH;
+      const viewportWidth = screenshot.screenshotWidth || img.naturalWidth;
+      const scale = img.naturalWidth / viewportWidth;
       const hasBbox = bbox &&
         Number.isFinite(bbox.x) && Number.isFinite(bbox.y) &&
         Number.isFinite(bbox.width) && Number.isFinite(bbox.height);
