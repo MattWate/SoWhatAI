@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RedFlag</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 420px;
+      min-height: 200px;
+      background: #0a0a0a;
+      color: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px 10px;
+      border-bottom: 1px solid #1e1e1e;
+    }
+    .header-logo {
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.3px;
+    }
+    .header-logo span { color: #2dd4bf; }
+    .version-badge {
+      font-size: 10px;
+      background: #1e1e1e;
+      color: #64748b;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid #2a2a2a;
+    }
+
+    /* ── Auth Section ── */
+    #auth-section {
+      padding: 20px 16px;
+    }
+    .auth-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 4px;
+    }
+    .auth-subtitle {
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 16px;
+    }
+    .field { margin-bottom: 10px; }
+    .field label {
+      display: block;
+      font-size: 11px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .field input {
+      width: 100%;
+      padding: 8px 10px;
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #f1f5f9;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .field input:focus { border-color: #2dd4bf; }
+    .btn-teal {
+      width: 100%;
+      padding: 9px;
+      background: #0d9488;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 4px;
+      transition: background 0.15s;
+    }
+    .btn-teal:hover { background: #0f766e; }
+    .btn-teal:disabled { background: #1e3a38; color: #4b7a74; cursor: not-allowed; }
+    .auth-link {
+      text-align: center;
+      margin-top: 12px;
+      font-size: 11px;
+      color: #64748b;
+    }
+    .auth-link a { color: #2dd4bf; text-decoration: none; }
+    .auth-error {
+      margin-top: 8px;
+      padding: 7px 10px;
+      background: #1f1010;
+      border: 1px solid #7f1d1d;
+      border-radius: 6px;
+      color: #fca5a5;
+      font-size: 12px;
+      display: none;
+    }
+
+    /* ── Main Section ── */
+    #main-section { display: none; padding: 12px 16px; }
+
+    .page-url {
+      font-size: 11px;
+      color: #475569;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 10px;
+    }
+
+    .btn-scan {
+      width: 100%;
+      padding: 10px;
+      background: #0d9488;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      letter-spacing: 0.2px;
+      transition: background 0.15s;
+      margin-bottom: 12px;
+    }
+    .btn-scan:hover { background: #0f766e; }
+    .btn-scan:disabled { background: #1e3a38; color: #4b7a74; cursor: not-allowed; }
+
+    /* ── Spinner ── */
+    #spinner {
+      display: none;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 0;
+      color: #64748b;
+      font-size: 12px;
+    }
+    .spin {
+      width: 16px; height: 16px;
+      border: 2px solid #1e1e1e;
+      border-top-color: #2dd4bf;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Results ── */
+    #results-section { display: none; }
+
+    .severity-bar {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .severity-badge {
+      flex: 1;
+      text-align: center;
+      padding: 6px 4px 5px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid transparent;
+    }
+    .severity-badge .count { display: block; font-size: 18px; font-weight: 700; line-height: 1.2; }
+    .sev-critical  { background: #1f0a0a; border-color: #7f1d1d; color: #fca5a5; }
+    .sev-serious   { background: #1c1005; border-color: #7c2d12; color: #fdba74; }
+    .sev-moderate  { background: #1a1500; border-color: #713f12; color: #fde68a; }
+    .sev-minor     { background: #0d1117; border-color: #1e3a5f; color: #93c5fd; }
+
+    .section-label {
+      font-size: 11px;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 6px;
+    }
+
+    #issue-list {
+      max-height: 280px;
+      overflow-y: auto;
+      margin-bottom: 10px;
+      scrollbar-width: thin;
+      scrollbar-color: #2a2a2a #0a0a0a;
+    }
+
+    .issue-item {
+      background: #111;
+      border: 1px solid #1e1e1e;
+      border-radius: 7px;
+      margin-bottom: 6px;
+      overflow: hidden;
+    }
+    .issue-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .issue-header:hover { background: #161616; }
+    .impact-pill {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .imp-critical { background: #7f1d1d; color: #fca5a5; }
+    .imp-serious  { background: #7c2d12; color: #fdba74; }
+    .imp-moderate { background: #713f12; color: #fde68a; }
+    .imp-minor    { background: #1e3a5f; color: #93c5fd; }
+
+    .issue-desc {
+      flex: 1;
+      font-size: 12px;
+      color: #cbd5e1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .issue-rule {
+      font-size: 10px;
+      color: #475569;
+      font-family: monospace;
+      flex-shrink: 0;
+    }
+    .issue-node-count {
+      font-size: 10px;
+      color: #475569;
+      flex-shrink: 0;
+    }
+    .issue-arrow {
+      font-size: 10px;
+      color: #475569;
+      transition: transform 0.15s;
+      flex-shrink: 0;
+    }
+    .issue-item.expanded .issue-arrow { transform: rotate(90deg); }
+
+    .issue-body {
+      display: none;
+      padding: 0 10px 10px;
+      border-top: 1px solid #1e1e1e;
+    }
+    .issue-item.expanded .issue-body { display: block; }
+
+    .node-item {
+      margin-top: 8px;
+      background: #0d0d0d;
+      border: 1px solid #1e1e1e;
+      border-radius: 5px;
+      padding: 7px 9px;
+    }
+    .node-selector {
+      font-size: 10px;
+      font-family: monospace;
+      color: #2dd4bf;
+      margin-bottom: 4px;
+      word-break: break-all;
+    }
+    .node-html {
+      font-size: 11px;
+      font-family: monospace;
+      color: #64748b;
+      white-space: pre-wrap;
+      word-break: break-all;
+      margin-bottom: 6px;
+    }
+    .node-actions { display: flex; gap: 6px; }
+    .btn-highlight {
+      padding: 4px 10px;
+      background: #0f2a28;
+      border: 1px solid #0d9488;
+      color: #2dd4bf;
+      font-size: 11px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .btn-highlight:hover { background: #0d3330; }
+    .btn-fixed {
+      padding: 4px 10px;
+      background: #111;
+      border: 1px solid #2a2a2a;
+      color: #64748b;
+      font-size: 11px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .btn-fixed:hover:not(:disabled) { border-color: #475569; color: #94a3b8; }
+    .btn-fixed:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Save / Footer ── */
+    .actions-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 4px;
+    }
+    .btn-save {
+      flex: 1;
+      padding: 9px;
+      background: #0d9488;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-right: 8px;
+    }
+    .btn-save:hover { background: #0f766e; }
+    .btn-save:disabled { background: #1e3a38; color: #4b7a74; cursor: not-allowed; }
+    .btn-clear-link {
+      font-size: 11px;
+      color: #475569;
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .btn-clear-link:hover { color: #94a3b8; }
+
+    .save-status {
+      font-size: 11px;
+      color: #2dd4bf;
+      margin-top: 6px;
+      min-height: 16px;
+    }
+
+    .scan-error {
+      padding: 10px 12px;
+      background: #1f0a0a;
+      border: 1px solid #7f1d1d;
+      border-radius: 6px;
+      color: #fca5a5;
+      font-size: 12px;
+      margin-bottom: 10px;
+      display: none;
+    }
+
+    .footer {
+      padding: 8px 16px;
+      border-top: 1px solid #111;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .btn-logout {
+      font-size: 11px;
+      color: #475569;
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .btn-logout:hover { color: #94a3b8; }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-logo">🚩 Red<span>Flag</span></div>
+    <span class="version-badge">v1.0.0</span>
+  </div>
+
+  <!-- Auth Section -->
+  <div id="auth-section">
+    <div class="auth-title">Sign in to RedFlag</div>
+    <div class="auth-subtitle">Connect to your accessibility dashboard</div>
+    <div class="field">
+      <label for="auth-email">Email</label>
+      <input type="email" id="auth-email" placeholder="you@example.com" autocomplete="email" />
+    </div>
+    <div class="field">
+      <label for="auth-password">Password</label>
+      <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+    <button class="btn-teal" id="btn-signin">Sign In</button>
+    <div class="auth-error" id="auth-error"></div>
+    <div class="auth-link">Don't have an account? <a href="https://sowhatai.netlify.app" target="_blank">Sign up at RedFlag</a></div>
+  </div>
+
+  <!-- Main Section -->
+  <div id="main-section">
+    <div class="page-url" id="page-url">—</div>
+
+    <button class="btn-scan" id="btn-scan">Scan This Page</button>
+
+    <div id="spinner"><div class="spin"></div> Scanning…</div>
+
+    <div class="scan-error" id="scan-error"></div>
+
+    <div id="results-section">
+      <div class="severity-bar">
+        <div class="severity-badge sev-critical"><span class="count" id="count-critical">0</span>Critical</div>
+        <div class="severity-badge sev-serious"><span class="count" id="count-serious">0</span>Serious</div>
+        <div class="severity-badge sev-moderate"><span class="count" id="count-moderate">0</span>Moderate</div>
+        <div class="severity-badge sev-minor"><span class="count" id="count-minor">0</span>Minor</div>
+      </div>
+
+      <div class="section-label" id="violations-label">Issues found</div>
+      <div id="issue-list"></div>
+
+      <div class="actions-row">
+        <button class="btn-save" id="btn-save">Save to Dashboard</button>
+        <button class="btn-clear-link" id="btn-clear">Clear Highlight</button>
+      </div>
+      <div class="save-status" id="save-status"></div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer" id="main-footer" style="display:none">
+    <button class="btn-logout" id="btn-logout">Logout</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

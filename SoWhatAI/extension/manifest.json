@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "RedFlag — Accessibility Scanner",
+  "version": "1.0.0",
+  "description": "Scan any webpage for WCAG 2.1 & 2.2 AA accessibility issues and sync to your RedFlag dashboard",
+
+  "permissions": ["activeTab", "storage", "scripting", "tabs"],
+  "host_permissions": ["https://wopdpporlylygxyvpene.supabase.co/*"],
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "RedFlag",
+    "default_icon": {
+      "16": "icons/16.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    }
+  },
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["lib/axe.min.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "web_accessible_resources": [
+    {
+      "resources": ["lib/axe.min.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "redflag-extension",
+  "version": "1.0.0",
+  "description": "RedFlag Chrome extension dependencies",
+  "private": true,
+  "dependencies": {
+    "axe-core": "^4.10.3"
+  }
+}
