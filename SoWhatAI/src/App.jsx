@@ -10,8 +10,6 @@ import HomePage from './pages/HomePage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import AnalysisToolPage from './pages/AnalysisToolPage.jsx';
-import WcagScanPage from './pages/WcagScanPage.jsx';
-import PageSpeedScanPage from './pages/PageSpeedScanPage.jsx';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -48,8 +46,8 @@ export default function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
-            <Route path="/wcag-scan" element={<WcagScanPage />} />
-            <Route path="/pagespeed-scan" element={<PageSpeedScanPage />} />
+            <Route path="/wcag-scan" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/pagespeed-scan" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={
               <ProtectedRoute user={user}><DashboardPage user={user} /></ProtectedRoute>
             } />

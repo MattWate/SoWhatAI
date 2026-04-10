@@ -11,20 +11,6 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
-[functions."wcag-scan"]
-  external_node_modules = ["playwright-core", "@sparticuz/chromium", "axe-core"]
-
-[functions."run-wcag-scan"]
-  external_node_modules = ["playwright-core", "@sparticuz/chromium", "axe-core", "@supabase/supabase-js"]
-
-[functions."run-wcag-scan-background"]
-  external_node_modules = ["playwright-core", "@sparticuz/chromium", "axe-core", "@supabase/supabase-js"]
-
-[functions.wcag-start]
-  external_node_modules = ["@supabase/supabase-js"]
-
-[functions.wcag-status]
-  external_node_modules = ["@supabase/supabase-js"]
 
 [functions."capture-page"]
   external_node_modules = ["@netlify/blobs"]
@@ -38,7 +24,3 @@
 [functions."snapshot-status"]
   external_node_modules = ["@netlify/blobs"]
 
-[[redirects]]
-  from = "/wcag-scan"
-  to = "/index.html"
-  status = 200
